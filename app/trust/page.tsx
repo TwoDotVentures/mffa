@@ -1,88 +1,106 @@
+import { Suspense } from 'react';
 import { PageHeader } from '@/components/page-header';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
+import { TrustDashboard } from '@/components/trust/trust-dashboard';
+import { TrustIncomeList } from '@/components/trust/trust-income-list';
+import { DistributionModeller } from '@/components/trust/distribution-modeller';
+import { DistributionList } from '@/components/trust/distribution-list';
+import { BeneficiaryCards } from '@/components/trust/beneficiary-cards';
+import { AddIncomeButton } from '@/components/trust/add-income-button';
+import { AddDistributionButton } from '@/components/trust/add-distribution-button';
+import { TrustSetupDialog } from '@/components/trust/trust-setup-dialog';
+import { Skeleton } from '@/components/ui/skeleton';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import {
+  getTrustSummary,
+  getTrustIncome,
+  getTrustDistributions,
+  getFrankingCredits,
+} from '@/lib/trust/actions';
 
-export default function TrustPage() {
+export const dynamic = 'force-dynamic';
+
+export default async function TrustPage() {
+  const summary = await getTrustSummary();
+
+  // If no trust exists, show setup
+  if (!summary) {
+    return (
+      <>
+        <PageHeader
+          title="Family Trust"
+          description="Set up your family trust to start tracking income and distributions"
+        />
+        <main className="flex-1 p-4 md:p-6">
+          <TrustSetupDialog />
+        </main>
+      </>
+    );
+  }
+
+  const [income, distributions, frankingCredits] = await Promise.all([
+    getTrustIncome(summary.trust.id),
+    getTrustDistributions(summary.trust.id),
+    getFrankingCredits(summary.trust.id),
+  ]);
+
+  const frankingAvailable =
+    (frankingCredits?.credits_received || 0) -
+    (frankingCredits?.credits_distributed || 0);
+
   return (
     <>
-      <PageHeader title="Trust" description="Moyle Family Trust management" />
-      <main className="flex-1 space-y-4 p-4 md:p-6">
-        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-          <Card>
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-medium">Income YTD</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">$0.00</div>
-              <p className="text-xs text-muted-foreground">FY 2024-25</p>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-medium">Franking Credits</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">$0.00</div>
-              <p className="text-xs text-muted-foreground">Available to stream</p>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-medium">Distributable</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">$0.00</div>
-              <p className="text-xs text-muted-foreground">Net income to distribute</p>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-medium">Distribution Deadline</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <Badge>30 June 2025</Badge>
-              <p className="mt-1 text-xs text-muted-foreground">Must distribute by this date</p>
-            </CardContent>
-          </Card>
-        </div>
+      <PageHeader
+        title={summary.trust.name}
+        description={`Trustee: ${summary.trust.trustee_name}`}
+      />
+      <main className="flex-1 space-y-6 p-4 md:p-6">
+        {/* Dashboard Summary */}
+        <TrustDashboard summary={summary} />
 
-        <div className="grid gap-4 md:grid-cols-2">
-          <Card>
-            <CardHeader>
-              <CardTitle>Beneficiaries</CardTitle>
-              <CardDescription>Grant and Shannon Moyle</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-4">
-                <div className="flex items-center justify-between rounded-lg border p-4">
-                  <div>
-                    <p className="font-medium">Grant Moyle</p>
-                    <p className="text-sm text-muted-foreground">Distributions: $0.00</p>
-                  </div>
-                  <Badge variant="outline">0%</Badge>
-                </div>
-                <div className="flex items-center justify-between rounded-lg border p-4">
-                  <div>
-                    <p className="font-medium">Shannon Moyle</p>
-                    <p className="text-sm text-muted-foreground">Distributions: $0.00</p>
-                  </div>
-                  <Badge variant="outline">0%</Badge>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardHeader>
-              <CardTitle>Distribution Modeller</CardTitle>
-              <CardDescription>Plan your distribution split</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="flex h-[150px] items-center justify-center text-muted-foreground">
-                Add trust income to model distribution scenarios
-              </div>
-            </CardContent>
-          </Card>
-        </div>
+        {/* Beneficiary Summary */}
+        <BeneficiaryCards
+          beneficiaries={summary.beneficiaries}
+          distributions={distributions}
+        />
+
+        {/* Tabbed Content */}
+        <Tabs defaultValue="income" className="space-y-4">
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+            <TabsList>
+              <TabsTrigger value="income">Income</TabsTrigger>
+              <TabsTrigger value="distributions">Distributions</TabsTrigger>
+              <TabsTrigger value="modeller">Distribution Modeller</TabsTrigger>
+            </TabsList>
+            <div className="flex gap-2">
+              <AddIncomeButton trustId={summary.trust.id} />
+              <AddDistributionButton
+                trustId={summary.trust.id}
+                beneficiaries={summary.beneficiaries}
+                maxAmount={summary.distributable_amount}
+                frankingAvailable={frankingAvailable}
+              />
+            </div>
+          </div>
+
+          <TabsContent value="income">
+            <Suspense fallback={<Skeleton className="h-64" />}>
+              <TrustIncomeList income={income} />
+            </Suspense>
+          </TabsContent>
+
+          <TabsContent value="distributions">
+            <Suspense fallback={<Skeleton className="h-64" />}>
+              <DistributionList distributions={distributions} />
+            </Suspense>
+          </TabsContent>
+
+          <TabsContent value="modeller">
+            <DistributionModeller
+              distributableAmount={summary.distributable_amount}
+              frankingCredits={summary.franking_credits_ytd}
+            />
+          </TabsContent>
+        </Tabs>
       </main>
     </>
   );
