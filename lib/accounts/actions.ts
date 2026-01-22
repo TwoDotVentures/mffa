@@ -17,7 +17,7 @@ export async function getAccounts(): Promise<Account[]> {
     return [];
   }
 
-  return data || [];
+  return (data || []) as Account[];
 }
 
 export async function getAccount(id: string): Promise<Account | null> {
@@ -34,7 +34,7 @@ export async function getAccount(id: string): Promise<Account | null> {
     return null;
   }
 
-  return data;
+  return data as Account;
 }
 
 export async function createAccount(formData: AccountFormData): Promise<{ success: boolean; error?: string }> {

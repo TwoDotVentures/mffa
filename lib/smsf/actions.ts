@@ -173,7 +173,7 @@ export async function getSmsfFunds(): Promise<SmsfFund[]> {
     .order('created_at', { ascending: false });
 
   if (error) throw new Error(error.message);
-  return data || [];
+  return (data || []) as unknown as SmsfFund[];
 }
 
 export async function getSmsfFund(id: string): Promise<SmsfFund | null> {
@@ -189,7 +189,7 @@ export async function getSmsfFund(id: string): Promise<SmsfFund | null> {
     .single();
 
   if (error) return null;
-  return data;
+  return data as unknown as SmsfFund;
 }
 
 export async function createSmsfFund(formData: SmsfFundFormData): Promise<SmsfFund> {
@@ -215,7 +215,7 @@ export async function createSmsfFund(formData: SmsfFundFormData): Promise<SmsfFu
   if (error) throw new Error(error.message);
 
   revalidatePath('/smsf');
-  return data;
+  return data as unknown as SmsfFund;
 }
 
 export async function updateSmsfFund(id: string, formData: Partial<SmsfFundFormData>): Promise<SmsfFund> {
@@ -234,7 +234,7 @@ export async function updateSmsfFund(id: string, formData: Partial<SmsfFundFormD
   if (error) throw new Error(error.message);
 
   revalidatePath('/smsf');
-  return data;
+  return data as unknown as SmsfFund;
 }
 
 export async function deleteSmsfFund(id: string): Promise<void> {
@@ -270,7 +270,7 @@ export async function getSmsfMembers(fundId: string): Promise<SmsfMember[]> {
     .order('name');
 
   if (error) throw new Error(error.message);
-  return data || [];
+  return (data || []) as unknown as SmsfMember[];
 }
 
 export async function createSmsfMember(formData: SmsfMemberFormData): Promise<SmsfMember> {
@@ -288,14 +288,14 @@ export async function createSmsfMember(formData: SmsfMemberFormData): Promise<Sm
       preservation_age: formData.preservation_age || null,
       total_super_balance: formData.total_super_balance || 0,
       member_status: formData.member_status || 'accumulation',
-    })
+    } as any)
     .select()
     .single();
 
   if (error) throw new Error(error.message);
 
   revalidatePath('/smsf');
-  return data;
+  return data as unknown as SmsfMember;
 }
 
 export async function updateSmsfMember(id: string, formData: Partial<SmsfMemberFormData>): Promise<SmsfMember> {
@@ -314,7 +314,7 @@ export async function updateSmsfMember(id: string, formData: Partial<SmsfMemberF
   if (error) throw new Error(error.message);
 
   revalidatePath('/smsf');
-  return data;
+  return data as unknown as SmsfMember;
 }
 
 export async function deleteSmsfMember(id: string): Promise<void> {
@@ -356,7 +356,7 @@ export async function getSmsfContributions(fundId: string, financialYear?: strin
   const { data, error } = await query;
 
   if (error) throw new Error(error.message);
-  return data || [];
+  return (data || []) as unknown as SmsfContribution[];
 }
 
 export async function getMemberContributions(memberId: string, financialYear?: string): Promise<SmsfContribution[]> {
@@ -378,7 +378,7 @@ export async function getMemberContributions(memberId: string, financialYear?: s
   const { data, error } = await query;
 
   if (error) throw new Error(error.message);
-  return data || [];
+  return (data || []) as unknown as SmsfContribution[];
 }
 
 export async function createSmsfContribution(formData: SmsfContributionFormData): Promise<SmsfContribution> {
@@ -400,14 +400,14 @@ export async function createSmsfContribution(formData: SmsfContributionFormData)
       date: formData.date,
       financial_year: financialYear,
       description: formData.description || null,
-    })
+    } as any)
     .select()
     .single();
 
   if (error) throw new Error(error.message);
 
   revalidatePath('/smsf');
-  return data;
+  return data as unknown as SmsfContribution;
 }
 
 export async function deleteSmsfContribution(id: string): Promise<void> {
@@ -500,7 +500,7 @@ export async function getMemberContributionSummary(
 
   // Calculate available carry-forward
   // Eligible if total super balance < $500,000 at previous 30 June
-  const isEligible = member.total_super_balance < 500000;
+  const isEligible = (member.total_super_balance || 0) < 500000;
   const carryForwardBreakdown = (carryForwardData || [])
     .filter((cf: any) => cf.eligible_for_carry_forward && cf.unused_amount > 0)
     .map((cf: any) => ({
@@ -551,7 +551,7 @@ export async function getSmsfInvestments(fundId: string): Promise<SmsfInvestment
     .order('asset_type');
 
   if (error) throw new Error(error.message);
-  return data || [];
+  return (data || []) as unknown as SmsfInvestment[];
 }
 
 export async function createSmsfInvestment(formData: SmsfInvestmentFormData): Promise<SmsfInvestment> {
@@ -579,7 +579,7 @@ export async function createSmsfInvestment(formData: SmsfInvestmentFormData): Pr
   if (error) throw new Error(error.message);
 
   revalidatePath('/smsf');
-  return data;
+  return data as unknown as SmsfInvestment;
 }
 
 export async function updateSmsfInvestment(id: string, formData: Partial<SmsfInvestmentFormData>): Promise<SmsfInvestment> {
@@ -598,7 +598,7 @@ export async function updateSmsfInvestment(id: string, formData: Partial<SmsfInv
   if (error) throw new Error(error.message);
 
   revalidatePath('/smsf');
-  return data;
+  return data as unknown as SmsfInvestment;
 }
 
 export async function deleteSmsfInvestment(id: string): Promise<void> {
@@ -640,7 +640,7 @@ export async function getSmsfTransactions(fundId: string, financialYear?: string
   const { data, error } = await query;
 
   if (error) throw new Error(error.message);
-  return data || [];
+  return (data || []) as unknown as SmsfTransaction[];
 }
 
 export async function createSmsfTransaction(formData: SmsfTransactionFormData): Promise<SmsfTransaction> {
@@ -663,14 +663,14 @@ export async function createSmsfTransaction(formData: SmsfTransactionFormData): 
       date: formData.date,
       financial_year: financialYear,
       description: formData.description || null,
-    })
+    } as any)
     .select()
     .single();
 
   if (error) throw new Error(error.message);
 
   revalidatePath('/smsf');
-  return data;
+  return data as unknown as SmsfTransaction;
 }
 
 export async function deleteSmsfTransaction(id: string): Promise<void> {
@@ -712,7 +712,7 @@ export async function getSmsfCompliance(fundId: string, financialYear?: string):
   const { data, error } = await query;
 
   if (error) throw new Error(error.message);
-  return data || [];
+  return (data || []) as unknown as SmsfCompliance[];
 }
 
 export async function createOrUpdateSmsfCompliance(
@@ -743,7 +743,7 @@ export async function createOrUpdateSmsfCompliance(
 
     if (error) throw new Error(error.message);
     revalidatePath('/smsf');
-    return data;
+    return data as unknown as SmsfCompliance;
   } else {
     const { data, error } = await supabase
       .from('smsf_compliance')
@@ -757,7 +757,7 @@ export async function createOrUpdateSmsfCompliance(
 
     if (error) throw new Error(error.message);
     revalidatePath('/smsf');
-    return data;
+    return data as unknown as SmsfCompliance;
   }
 }
 
@@ -873,8 +873,8 @@ export async function getSmsfDashboard(fundId: string): Promise<SmsfDashboardDat
   const totalBalance = memberList.reduce((sum: number, m: any) => sum + Number(m.total_super_balance), 0);
 
   return {
-    fund,
-    members: memberList,
+    fund: fund as unknown as SmsfFund,
+    members: memberList as unknown as SmsfMember[],
     totalBalance,
     investments: {
       total: totalInvestmentValue,
@@ -890,7 +890,7 @@ export async function getSmsfDashboard(fundId: string): Promise<SmsfDashboardDat
       currentFY: totalContributions,
       byType: contributionTypeBreakdown,
     },
-    compliance: compliance || null,
-    recentTransactions: transactions || [],
+    compliance: (compliance || null) as unknown as SmsfCompliance | null,
+    recentTransactions: (transactions || []) as unknown as SmsfTransaction[],
   };
 }

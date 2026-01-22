@@ -108,7 +108,7 @@ export async function getTrustBeneficiaries(
     console.error('Error fetching beneficiaries:', error);
     return [];
   }
-  return data || [];
+  return (data || []) as unknown as TrustBeneficiary[];
 }
 
 // Add beneficiary
@@ -154,7 +154,7 @@ export async function getTrustIncome(
     console.error('Error fetching trust income:', error);
     return [];
   }
-  return data || [];
+  return (data || []) as unknown as TrustIncome[];
 }
 
 // Add trust income (dividend, etc.)
@@ -208,7 +208,7 @@ export async function deleteTrustIncome(
   }
 
   // Adjust franking credits
-  if (income.franking_credits > 0) {
+  if (income.franking_credits && income.franking_credits > 0) {
     await updateFrankingCreditsBalance(
       income.trust_id,
       income.financial_year,
@@ -250,7 +250,7 @@ export async function getTrustDistributions(
     console.error('Error fetching distributions:', error);
     return [];
   }
-  return data || [];
+  return (data || []) as unknown as TrustDistribution[];
 }
 
 // Record distribution
@@ -311,7 +311,7 @@ export async function deleteTrustDistribution(
   }
 
   // Adjust franking credits
-  if (distribution.franking_credits_streamed > 0) {
+  if (distribution.franking_credits_streamed && distribution.franking_credits_streamed > 0) {
     await updateFrankingCreditsBalance(
       distribution.trust_id,
       distribution.financial_year,
@@ -369,8 +369,8 @@ async function updateFrankingCreditsBalance(
     await supabase
       .from('franking_credits')
       .update({
-        credits_received: existing.credits_received + creditsReceived,
-        credits_distributed: existing.credits_distributed + creditsDistributed,
+        credits_received: (existing.credits_received || 0) + creditsReceived,
+        credits_distributed: (existing.credits_distributed || 0) + creditsDistributed,
         updated_at: new Date().toISOString(),
       })
       .eq('id', existing.id);
@@ -406,7 +406,7 @@ export async function getTrustInvestments(
     console.error('Error fetching investments:', error);
     return [];
   }
-  return data || [];
+  return (data || []) as unknown as TrustInvestment[];
 }
 
 // ============================================

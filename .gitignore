@@ -39,3 +39,20 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# firebase
+.firebase/
+
+# backups
+.basiq-backup/
+.phase7-backup/
+
+# test artifacts
+test-results/
+playwright-report/
+*.png
+
+# temp files
+DOCUMENTS_PAGE_TEST_REPORT.md
+test-documents-page.spec.js
+test-documents-page.spec.ts

@@ -1,0 +1,15 @@
+{
+  "projects": {
+    "default": "moyle-app"
+  },
+  "targets": {
+    "moyle-app": {
+      "hosting": {
+        "finances": [
+          "finances-moyle"
+        ]
+      }
+    }
+  },
+  "etags": {}
+}

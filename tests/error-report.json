@@ -1,0 +1,49 @@
+{
+  "summary": {
+    "totalConsoleLogs": 7,
+    "totalPageErrors": 0,
+    "totalNetworkErrors": 0,
+    "pageUrl": "http://localhost:3000/login",
+    "pageTitle": "Moyle Family Finance"
+  },
+  "consoleLogs": [
+    {
+      "type": "verbose",
+      "text": "[DOM] Input elements should have autocomplete attributes (suggested: \"current-password\"): (More info: https://goo.gl/9p2vKq) %o",
+      "location": "http://localhost:3000/login:0:0"
+    },
+    {
+      "type": "info",
+      "text": "%cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold",
+      "location": "http://localhost:3000/_next/static/chunks/node_modules_next_dist_f3530cac._.js:2297:27"
+    },
+    {
+      "type": "log",
+      "text": "[HMR] connected",
+      "location": "http://localhost:3000/_next/static/chunks/node_modules_next_dist_f3530cac._.js:2297:27"
+    },
+    {
+      "type": "error",
+      "text": "TypeError: Failed to fetch\n    at http://localhost:3000/_next/static/chunks/node_modules_%40supabase_auth-js_dist_module_e6c70351._.js:598:23\n    at _handleRequest (http://localhost:3000/_next/static/chunks/node_modules_%40supabase_auth-js_dist_module_e6c70351._.js:952:24)\n    at _request (http://localhost:3000/_next/static/chunks/node_modules_%40supabase_auth-js_dist_module_e6c70351._.js:939:24)\n    at SupabaseAuthClient.signInWithPassword (http://localhost:3000/_next/static/chunks/node_modules_%40supabase_auth-js_dist_module_e6c70351._.js:3188:219)\n    at LoginPage[handleLogin] (http://localhost:3000/_next/static/chunks/_ea43aa93._.js:428:64)\n    at executeDispatch (http://localhost:3000/_next/static/chunks/node_modules_next_dist_compiled_react-dom_1e674e59._.js:10314:13)\n    at runWithFiberInDEV (http://localhost:3000/_next/static/chunks/node_modules_next_dist_compiled_react-dom_1e674e59._.js:965:74)\n    at processDispatchQueue (http://localhost:3000/_next/static/chunks/node_modules_next_dist_compiled_react-dom_1e674e59._.js:10340:41)\n    at http://localhost:3000/_next/static/chunks/node_modules_next_dist_compiled_react-dom_1e674e59._.js:10615:13\n    at batchedUpdates$1 (http://localhost:3000/_next/static/chunks/node_modules_next_dist_compiled_react-dom_1e674e59._.js:2253:44)\n    at dispatchEventForPluginEventSystem (http://localhost:3000/_next/static/chunks/node_modules_next_dist_compiled_react-dom_1e674e59._.js:10416:9)\n    at dispatchEvent (http://localhost:3000/_next/static/chunks/node_modules_next_dist_compiled_react-dom_1e674e59._.js:12935:37)\n    at dispatchDiscreteEvent (http://localhost:3000/_next/static/chunks/node_modules_next_dist_compiled_react-dom_1e674e59._.js:12917:64)",
+      "location": "http://localhost:3000/_next/static/chunks/node_modules_next_dist_f3530cac._.js:3127:31"
+    },
+    {
+      "type": "verbose",
+      "text": "[DOM] Input elements should have autocomplete attributes (suggested: \"current-password\"): (More info: https://goo.gl/9p2vKq) %o",
+      "location": "http://localhost:3000/login:0:0"
+    },
+    {
+      "type": "info",
+      "text": "%cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold",
+      "location": "http://localhost:3000/_next/static/chunks/node_modules_next_dist_f3530cac._.js:2297:27"
+    },
+    {
+      "type": "log",
+      "text": "[HMR] connected",
+      "location": "http://localhost:3000/_next/static/chunks/node_modules_next_dist_f3530cac._.js:2297:27"
+    }
+  ],
+  "pageErrors": [],
+  "networkErrors": [],
+  "timestamp": "2026-01-01T05:27:15.838Z"
+}

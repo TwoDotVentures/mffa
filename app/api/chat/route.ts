@@ -3,6 +3,7 @@ import { createClient } from '@/lib/supabase/server';
 import { getModel, type AIProvider } from '@/lib/ai/providers';
 import { SYSTEM_PROMPT } from '@/lib/ai/system-prompt';
 import { allTools } from '@/lib/ai/tools';
+import type { Json } from '@/lib/supabase/database.types';
 
 interface ChatMessage {
   role: string;
@@ -92,7 +93,7 @@ export async function POST(req: Request) {
             await supabase
               .from('ai_conversations')
               .update({
-                messages: updatedMessages,
+                messages: updatedMessages as unknown as Json,
                 model_used: `${provider}/${modelId}`,
               })
               .eq('id', conversationId)
@@ -105,7 +106,7 @@ export async function POST(req: Request) {
               .insert({
                 user_id: user.id,
                 title,
-                messages: updatedMessages,
+                messages: updatedMessages as unknown as Json,
                 model_used: `${provider}/${modelId}`,
               });
           }

@@ -1,9 +1,10 @@
+import Link from 'next/link';
 import { PageHeader } from '@/components/page-header';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
-import { Bot, Database, User } from 'lucide-react';
+import { Bot, Database, User, Building2, ChevronRight } from 'lucide-react';
 
 export default function SettingsPage() {
   return (
@@ -11,6 +12,31 @@ export default function SettingsPage() {
       <PageHeader title="Settings" description="Configure your app preferences" />
       <main className="flex-1 space-y-4 p-4 md:p-6">
         <div className="mx-auto max-w-2xl space-y-6">
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Building2 className="h-5 w-5" />
+                Bank Connections
+              </CardTitle>
+              <CardDescription>
+                Connect your bank accounts for automatic transaction sync
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <Link href="/settings/bank-connections">
+                <div className="flex items-center justify-between rounded-lg border p-4 transition-colors hover:bg-muted/50">
+                  <div>
+                    <p className="font-medium">Import Transactions</p>
+                    <p className="text-sm text-muted-foreground">
+                      CSV upload from ING, CBA, NAB, ANZ, and more
+                    </p>
+                  </div>
+                  <ChevronRight className="h-5 w-5 text-muted-foreground" />
+                </div>
+              </Link>
+            </CardContent>
+          </Card>
+
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2">

@@ -56,7 +56,7 @@ export async function getTransactions(filters?: TransactionFilters): Promise<Tra
     return [];
   }
 
-  return data || [];
+  return (data || []) as unknown as Transaction[];
 }
 
 export async function getTransaction(id: string): Promise<Transaction | null> {
@@ -77,7 +77,7 @@ export async function getTransaction(id: string): Promise<Transaction | null> {
     return null;
   }
 
-  return data;
+  return data as unknown as Transaction;
 }
 
 export async function createTransaction(formData: TransactionFormData): Promise<{ success: boolean; error?: string }> {
@@ -224,7 +224,7 @@ export async function getCategories(): Promise<Category[]> {
     return [];
   }
 
-  return data || [];
+  return (data || []) as unknown as Category[];
 }
 
 export async function createCategory(name: string, categoryType: 'income' | 'expense' | 'transfer'): Promise<{ success: boolean; category?: Category; error?: string }> {
@@ -252,7 +252,7 @@ export async function createCategory(name: string, categoryType: 'income' | 'exp
   }
 
   revalidatePath('/transactions');
-  return { success: true, category: data };
+  return { success: true, category: data as unknown as Category };
 }
 
 export async function createDefaultCategories(): Promise<void> {
@@ -327,7 +327,7 @@ export async function getCategorisationRules(): Promise<CategorisationRule[]> {
     return [];
   }
 
-  return data || [];
+  return (data || []) as unknown as CategorisationRule[];
 }
 
 export async function createCategorisationRule(
@@ -369,7 +369,7 @@ export async function createCategorisationRule(
   }
 
   revalidatePath('/transactions');
-  return { success: true, rule: data };
+  return { success: true, rule: data as unknown as CategorisationRule };
 }
 
 export async function updateCategorisationRule(
@@ -471,8 +471,8 @@ export async function applyCategorisationRules(transactionIds?: string[]): Promi
   let categorisedCount = 0;
 
   // Apply rules to each uncategorised transaction
-  for (const transaction of transactions) {
-    for (const rule of rules) {
+  for (const transaction of transactions as unknown as Transaction[]) {
+    for (const rule of rules as unknown as CategorisationRule[]) {
       if (matchesRule(transaction, rule)) {
         const { error: updateError } = await supabase
           .from('transactions')

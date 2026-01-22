@@ -36,7 +36,7 @@ This is the **primary implementation guide**. Work through phases in order.
 ### 1.3 Authentication
 
 - [ ] Implement Supabase Auth
-- [ ] Create login/signup pages
+- [ ] Create login page (Google OAuth only)
 - [ ] Add auth middleware
 - [ ] Create users and family_members tables
 

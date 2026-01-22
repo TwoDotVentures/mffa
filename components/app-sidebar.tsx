@@ -2,17 +2,20 @@
 
 import * as React from 'react';
 import Link from 'next/link';
-import { usePathname, useRouter } from 'next/navigation';
+import { usePathname } from 'next/navigation';
 import {
   LayoutDashboard,
   Wallet,
   ArrowRightLeft,
+  TrendingUp,
+  Receipt,
   PiggyBank,
   Building2,
   MessageSquare,
   Settings,
-  LogOut,
-  User,
+  Target,
+  FileText,
+  Users,
 } from 'lucide-react';
 import {
   Sidebar,
@@ -26,24 +29,18 @@ import {
   SidebarMenuButton,
   SidebarMenuItem,
 } from '@/components/ui/sidebar';
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu';
-import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { ThemeToggle } from '@/components/theme-toggle';
-import { createClient } from '@/lib/supabase/client';
-import { useEffect, useState } from 'react';
-import type { User as SupabaseUser } from '@supabase/supabase-js';
 
 const navigationItems = [
   {
     title: 'Dashboard',
     href: '/dashboard',
     icon: LayoutDashboard,
+  },
+  {
+    title: 'Net Worth',
+    href: '/net-worth',
+    icon: TrendingUp,
   },
   {
     title: 'Accounts',
@@ -54,6 +51,26 @@ const navigationItems = [
     title: 'Transactions',
     href: '/transactions',
     icon: ArrowRightLeft,
+  },
+  {
+    title: 'Budgets',
+    href: '/budgets',
+    icon: Target,
+  },
+  {
+    title: 'Documents',
+    href: '/documents',
+    icon: FileText,
+  },
+  {
+    title: 'Family',
+    href: '/family-members',
+    icon: Users,
+  },
+  {
+    title: 'Tax',
+    href: '/tax',
+    icon: Receipt,
   },
 ];
 
@@ -85,46 +102,6 @@ const toolItems = [
 
 export function AppSidebar() {
   const pathname = usePathname();
-  const router = useRouter();
-  const [user, setUser] = useState<SupabaseUser | null>(null);
-  const supabase = createClient();
-
-  useEffect(() => {
-    const getUser = async () => {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-      setUser(user);
-    };
-
-    getUser();
-
-    const {
-      data: { subscription },
-    } = supabase.auth.onAuthStateChange((_event, session) => {
-      setUser(session?.user ?? null);
-    });
-
-    return () => subscription.unsubscribe();
-  }, [supabase.auth]);
-
-  const handleLogout = async () => {
-    await supabase.auth.signOut();
-    router.push('/login');
-    router.refresh();
-  };
-
-  const getInitials = (name: string | undefined, email: string | undefined) => {
-    if (name) {
-      return name
-        .split(' ')
-        .map((n) => n[0])
-        .join('')
-        .toUpperCase()
-        .slice(0, 2);
-    }
-    return email?.slice(0, 2).toUpperCase() ?? 'U';
-  };
 
   return (
     <Sidebar>
@@ -143,7 +120,7 @@ export function AppSidebar() {
             <SidebarMenu>
               {navigationItems.map((item) => (
                 <SidebarMenuItem key={item.href}>
-                  <SidebarMenuButton asChild isActive={pathname === item.href}>
+                  <SidebarMenuButton asChild isActive={pathname === item.href || pathname.startsWith(item.href + '/')}>
                     <Link href={item.href}>
                       <item.icon />
                       <span>{item.title}</span>
@@ -196,38 +173,6 @@ export function AppSidebar() {
           <span className="text-xs text-muted-foreground">Theme</span>
           <ThemeToggle />
         </div>
-        {user && (
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <button className="flex w-full items-center gap-2 rounded-md px-2 py-2 hover:bg-sidebar-accent">
-                <Avatar className="h-8 w-8">
-                  <AvatarFallback className="text-xs">
-                    {getInitials(user.user_metadata?.full_name, user.email)}
-                  </AvatarFallback>
-                </Avatar>
-                <div className="flex flex-1 flex-col items-start text-sm">
-                  <span className="font-medium">
-                    {user.user_metadata?.full_name || 'User'}
-                  </span>
-                  <span className="text-xs text-muted-foreground">{user.email}</span>
-                </div>
-              </button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="start" className="w-56">
-              <DropdownMenuItem asChild>
-                <Link href="/settings">
-                  <User className="mr-2 h-4 w-4" />
-                  Profile
-                </Link>
-              </DropdownMenuItem>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem onClick={handleLogout} className="text-destructive">
-                <LogOut className="mr-2 h-4 w-4" />
-                Log out
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
-        )}
       </SidebarFooter>
     </Sidebar>
   );
