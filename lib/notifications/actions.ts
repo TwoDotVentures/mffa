@@ -1,14 +1,28 @@
+/**
+ * @fileoverview Server actions for managing notifications and automated reminders.
+ * Provides CRUD operations for notifications and automatic reminder generation
+ * for tax deadlines, trust distributions, super cap warnings, and SMSF audits.
+ * @module lib/notifications/actions
+ */
+
 'use server';
 
 import { revalidatePath } from 'next/cache';
 import { createClient } from '@/lib/supabase/server';
-import type { Notification, CreateNotificationData } from '@/lib/types';
+import type { Notification, CreateNotificationData, NotificationInsert } from '@/lib/types';
 import { getCurrentFinancialYear, getDaysUntilEOFY } from '@/lib/trust/utils';
 
 // ============================================
 // Notification CRUD Operations
 // ============================================
 
+/**
+ * Retrieves active notifications for the current user.
+ * Filters out dismissed notifications and respects scheduled delivery times.
+ *
+ * @param limit - Maximum number of notifications to return (default: 20)
+ * @returns Promise resolving to an array of Notification objects
+ */
 export async function getNotifications(limit: number = 20): Promise<Notification[]> {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
@@ -113,21 +127,23 @@ export async function createNotification(data: CreateNotificationData): Promise<
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return { success: false, error: 'Not authenticated' };
 
+  const insertData: NotificationInsert = {
+    user_id: user.id,
+    title: data.title,
+    message: data.message,
+    notification_type: data.notification_type,
+    priority: data.priority || 'medium',
+    scheduled_for: data.scheduled_for || null,
+    expires_at: data.expires_at || null,
+    link_url: data.link_url || null,
+    related_entity_type: data.related_entity_type || null,
+    related_entity_id: data.related_entity_id || null,
+    metadata: data.metadata || {},
+  };
+
   const { error } = await supabase
     .from('notifications')
-    .insert({
-      user_id: user.id,
-      title: data.title,
-      message: data.message,
-      notification_type: data.notification_type,
-      priority: data.priority || 'medium',
-      scheduled_for: data.scheduled_for || null,
-      expires_at: data.expires_at || null,
-      link_url: data.link_url || null,
-      related_entity_type: data.related_entity_type || null,
-      related_entity_id: data.related_entity_id || null,
-      metadata: data.metadata || {},
-    } as any);
+    .insert(insertData);
 
   if (error) {
     console.error('Error creating notification:', error);
@@ -208,9 +224,10 @@ async function checkSuperCapWarnings(supabase: ReturnType<typeof createClient> e
 
   if (!contributions || contributions.length === 0) return;
 
-  const concessional = contributions
-    .filter((c) => c.is_concessional)
-    .reduce((sum, c) => sum + (c.amount || 0), 0);
+  type ContribRec = { amount: number; is_concessional: boolean };
+  const concessional = (contributions as ContribRec[])
+    .filter((c: ContribRec) => c.is_concessional)
+    .reduce((sum: number, c: ContribRec) => sum + (c.amount || 0), 0);
 
   const concessionalCap = 30000;
   const percentage = (concessional / concessionalCap) * 100;

@@ -1,12 +1,28 @@
+/**
+ * @fileoverview Server actions for managing financial accounts.
+ * Provides CRUD operations and balance calculations for user accounts.
+ * @module lib/accounts/actions
+ */
+
 'use server';
 
 import { revalidatePath } from 'next/cache';
 import { createClient } from '@/lib/supabase/server';
 import type { Account, AccountFormData } from '@/lib/types';
 
-// Default user ID for this app (no auth)
+/** Default user ID for this app (no auth) */
 const DEFAULT_USER_ID = '00000000-0000-0000-0000-000000000001';
 
+/**
+ * Retrieves all accounts for the default user with calculated balances.
+ * Fetches accounts from the database and computes the calculated balance
+ * by summing all transaction amounts (income adds, expense subtracts).
+ *
+ * @returns Promise resolving to an array of Account objects with calculated_balance
+ * @example
+ * const accounts = await getAccounts();
+ * console.log(accounts[0].calculated_balance);
+ */
 export async function getAccounts(): Promise<Account[]> {
   const supabase = await createClient();
 
@@ -27,11 +43,12 @@ export async function getAccounts(): Promise<Account[]> {
 
   // Fetch transaction sums for each account
   // Amounts are stored as positive values, transaction_type determines the sign
-  const accountIds = accounts.map(a => a.id);
+  const accountIds = accounts.map((a: typeof accounts[number]) => a.id);
 
+  type TransactionSum = { account_id: string; amount: number; transaction_type: string };
   // Fetch transactions in batches to overcome Supabase's 1000 row limit
   const BATCH_SIZE = 1000;
-  let allTransactionSums: { account_id: string; amount: number; transaction_type: string }[] = [];
+  let allTransactionSums: TransactionSum[] = [];
   let offset = 0;
   let hasMore = true;
 
@@ -75,12 +92,24 @@ export async function getAccounts(): Promise<Account[]> {
 
   // Add calculated_balance field (starting_balance + transaction sums)
   // current_balance remains as the starting balance for editing
-  return accounts.map(account => ({
+  type AccountRow = typeof accounts[number];
+  return accounts.map((account: AccountRow) => ({
     ...account,
     calculated_balance: (account.current_balance || 0) + (sumByAccount[account.id] || 0),
   })) as Account[];
 }
 
+/**
+ * Retrieves a single account by its ID.
+ *
+ * @param id - The UUID of the account to retrieve
+ * @returns Promise resolving to the Account object or null if not found
+ * @example
+ * const account = await getAccount('abc-123');
+ * if (account) {
+ *   console.log(account.name);
+ * }
+ */
 export async function getAccount(id: string): Promise<Account | null> {
   const supabase = await createClient();
 
@@ -98,6 +127,20 @@ export async function getAccount(id: string): Promise<Account | null> {
   return data as Account;
 }
 
+/**
+ * Creates a new account with the provided form data.
+ * Automatically assigns the default user ID and revalidates the accounts path.
+ *
+ * @param formData - The account data including name, type, institution, etc.
+ * @returns Promise resolving to success status and optional error message
+ * @example
+ * const result = await createAccount({
+ *   name: 'Savings Account',
+ *   account_type: 'savings',
+ *   institution: 'ANZ',
+ *   current_balance: 1000
+ * });
+ */
 export async function createAccount(formData: AccountFormData): Promise<{ success: boolean; error?: string }> {
   const supabase = await createClient();
 
@@ -126,6 +169,16 @@ export async function createAccount(formData: AccountFormData): Promise<{ succes
   return { success: true };
 }
 
+/**
+ * Updates an existing account with new data.
+ * Revalidates the accounts path after successful update.
+ *
+ * @param id - The UUID of the account to update
+ * @param formData - The updated account data
+ * @returns Promise resolving to success status and optional error message
+ * @example
+ * const result = await updateAccount('abc-123', { name: 'New Name' });
+ */
 export async function updateAccount(id: string, formData: AccountFormData): Promise<{ success: boolean; error?: string }> {
   const supabase = await createClient();
 
@@ -154,6 +207,15 @@ export async function updateAccount(id: string, formData: AccountFormData): Prom
   return { success: true };
 }
 
+/**
+ * Deletes an account by its ID.
+ * Revalidates the accounts path after successful deletion.
+ *
+ * @param id - The UUID of the account to delete
+ * @returns Promise resolving to success status and optional error message
+ * @example
+ * const result = await deleteAccount('abc-123');
+ */
 export async function deleteAccount(id: string): Promise<{ success: boolean; error?: string }> {
   const supabase = await createClient();
 
@@ -171,6 +233,15 @@ export async function deleteAccount(id: string): Promise<{ success: boolean; err
   return { success: true };
 }
 
+/**
+ * Calculates a summary of all accounts including total balance, debt, and net position.
+ * Credit and loan accounts are counted as debt, all others contribute to total balance.
+ *
+ * @returns Promise resolving to summary object with totals and account count
+ * @example
+ * const summary = await getAccountsSummary();
+ * console.log(`Net position: ${summary.netPosition}`);
+ */
 export async function getAccountsSummary(): Promise<{
   totalBalance: number;
   totalDebt: number;

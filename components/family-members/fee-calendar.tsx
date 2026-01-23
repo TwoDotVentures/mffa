@@ -1,3 +1,15 @@
+/**
+ * Fee Calendar Component
+ *
+ * Calendar view for visualizing fee due dates.
+ * Mobile-first responsive design with:
+ * - Compact calendar cells on mobile
+ * - Touch-friendly navigation
+ * - Responsive month summary layout
+ * - Simplified mobile fee indicators
+ *
+ * @module components/family-members/fee-calendar
+ */
 'use client';
 
 import { useState, useEffect, useMemo } from 'react';
@@ -15,7 +27,6 @@ import {
   ChevronRight,
   Calendar,
   DollarSign,
-  AlertCircle,
   Check,
   Loader2,
 } from 'lucide-react';
@@ -25,17 +36,31 @@ import type { SchoolFee } from '@/lib/types';
 import { cn } from '@/lib/utils';
 
 interface FeeCalendarProps {
+  /** Year to display fees for */
   year?: number;
+  /** Callback when a fee is clicked */
   onFeeClick?: (fee: SchoolFee) => void;
 }
 
+/** Month names for display */
 const MONTHS = [
   'January', 'February', 'March', 'April', 'May', 'June',
   'July', 'August', 'September', 'October', 'November', 'December',
 ];
 
+/** Short month names for mobile */
+const MONTHS_SHORT = [
+  'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+  'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
+];
+
+/** Day names for calendar header */
 const DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
+/** Short day names for mobile */
+const DAYS_SHORT = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
+
+/** Calendar day data structure */
 interface CalendarDay {
   date: Date;
   isCurrentMonth: boolean;
@@ -43,6 +68,9 @@ interface CalendarDay {
   isToday: boolean;
 }
 
+/**
+ * Generate calendar days for a given month
+ */
 function getCalendarDays(year: number, month: number, fees: SchoolFee[]): CalendarDay[] {
   const firstDay = new Date(year, month, 1);
   const lastDay = new Date(year, month + 1, 0);
@@ -91,6 +119,10 @@ function getCalendarDays(year: number, month: number, fees: SchoolFee[]): Calend
   return days;
 }
 
+/**
+ * Fee Calendar Component
+ * Visual calendar for tracking fee due dates
+ */
 export function FeeCalendar({ year, onFeeClick }: FeeCalendarProps) {
   const [loading, setLoading] = useState(true);
   const [fees, setFees] = useState<SchoolFee[]>([]);
@@ -103,6 +135,7 @@ export function FeeCalendar({ year, onFeeClick }: FeeCalendarProps) {
     loadFees();
   }, [currentDate.year]);
 
+  /** Load fees for the current year */
   async function loadFees() {
     try {
       setLoading(true);
@@ -120,6 +153,7 @@ export function FeeCalendar({ year, onFeeClick }: FeeCalendarProps) {
     [currentDate.year, currentDate.month, fees]
   );
 
+  /** Navigate to previous/next month */
   function navigateMonth(delta: number) {
     setCurrentDate((prev) => {
       let newMonth = prev.month + delta;
@@ -137,11 +171,13 @@ export function FeeCalendar({ year, onFeeClick }: FeeCalendarProps) {
     });
   }
 
+  /** Navigate to current month */
   function goToToday() {
     const now = new Date();
     setCurrentDate({ year: now.getFullYear(), month: now.getMonth() });
   }
 
+  /** Get payment status for a calendar day */
   function getDayStatus(day: CalendarDay): 'none' | 'paid' | 'due' | 'overdue' {
     if (day.fees.length === 0) return 'none';
 
@@ -157,6 +193,7 @@ export function FeeCalendar({ year, onFeeClick }: FeeCalendarProps) {
     return 'due';
   }
 
+  /** Status background colors */
   const statusColors = {
     none: '',
     paid: 'bg-green-100 dark:bg-green-900/30',
@@ -164,6 +201,7 @@ export function FeeCalendar({ year, onFeeClick }: FeeCalendarProps) {
     overdue: 'bg-red-100 dark:bg-red-900/30',
   };
 
+  /** Status dot colors */
   const statusDotColors = {
     none: '',
     paid: 'bg-green-500',
@@ -183,8 +221,8 @@ export function FeeCalendar({ year, onFeeClick }: FeeCalendarProps) {
   if (loading) {
     return (
       <Card>
-        <CardContent className="flex items-center justify-center py-12">
-          <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+        <CardContent className="flex items-center justify-center py-8 sm:py-12">
+          <Loader2 className="h-5 w-5 animate-spin text-muted-foreground sm:h-6 sm:w-6" />
         </CardContent>
       </Card>
     );
@@ -192,49 +230,79 @@ export function FeeCalendar({ year, onFeeClick }: FeeCalendarProps) {
 
   return (
     <Card>
-      <CardHeader className="pb-2">
-        <div className="flex items-center justify-between">
+      <CardHeader className="pb-2 px-3 pt-3 sm:px-6 sm:pt-6">
+        {/* Header - stacks on mobile */}
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          {/* Title and Today button */}
           <div className="flex items-center gap-2">
-            <CardTitle className="flex items-center gap-2">
-              <Calendar className="h-5 w-5" />
-              Fee Calendar
+            <CardTitle className="flex items-center gap-2 text-base sm:text-lg">
+              <Calendar className="h-4 w-4 sm:h-5 sm:w-5" />
+              <span className="hidden sm:inline">Fee Calendar</span>
+              <span className="sm:hidden">Calendar</span>
             </CardTitle>
-            <Button variant="ghost" size="sm" onClick={goToToday}>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={goToToday}
+              className="h-7 px-2 text-xs sm:h-8 sm:px-3 sm:text-sm"
+            >
               Today
             </Button>
           </div>
-          <div className="flex items-center gap-2">
-            <Button variant="outline" size="icon" onClick={() => navigateMonth(-1)}>
+
+          {/* Month navigation */}
+          <div className="flex items-center justify-center gap-1 sm:gap-2">
+            <Button
+              variant="outline"
+              size="icon"
+              onClick={() => navigateMonth(-1)}
+              className="h-8 w-8 sm:h-9 sm:w-9"
+            >
               <ChevronLeft className="h-4 w-4" />
             </Button>
-            <span className="min-w-[150px] text-center font-medium">
-              {MONTHS[currentDate.month]} {currentDate.year}
+            <span className="min-w-[100px] text-center text-sm font-medium sm:min-w-[150px] sm:text-base">
+              <span className="sm:hidden">{MONTHS_SHORT[currentDate.month]} {currentDate.year}</span>
+              <span className="hidden sm:inline">{MONTHS[currentDate.month]} {currentDate.year}</span>
             </span>
-            <Button variant="outline" size="icon" onClick={() => navigateMonth(1)}>
+            <Button
+              variant="outline"
+              size="icon"
+              onClick={() => navigateMonth(1)}
+              className="h-8 w-8 sm:h-9 sm:w-9"
+            >
               <ChevronRight className="h-4 w-4" />
             </Button>
           </div>
         </div>
 
-        {/* Month Summary */}
-        <div className="mt-2 flex gap-4 text-sm text-muted-foreground">
-          <span>
-            <DollarSign className="mr-1 inline h-3 w-3" />
-            Month Total: {formatCurrency(monthTotal)}
+        {/* Month Summary - wraps on mobile */}
+        <div className="mt-2 flex flex-wrap gap-2 text-xs text-muted-foreground sm:gap-4 sm:text-sm">
+          <span className="flex items-center">
+            <DollarSign className="mr-0.5 h-3 w-3 sm:mr-1" />
+            <span className="hidden sm:inline">Month Total:</span>
+            <span className="sm:hidden">Total:</span>
+            {' '}{formatCurrency(monthTotal)}
           </span>
           {monthTotal > 0 && (
             <>
-              <span className="text-green-600">Paid: {formatCurrency(monthPaid)}</span>
+              <span className="text-green-600">
+                <span className="hidden sm:inline">Paid:</span>
+                <span className="sm:hidden">P:</span>
+                {' '}{formatCurrency(monthPaid)}
+              </span>
               <span className="text-amber-600">
-                Remaining: {formatCurrency(monthTotal - monthPaid)}
+                <span className="hidden sm:inline">Remaining:</span>
+                <span className="sm:hidden">R:</span>
+                {' '}{formatCurrency(monthTotal - monthPaid)}
               </span>
             </>
           )}
         </div>
       </CardHeader>
-      <CardContent>
-        {/* Legend */}
-        <div className="mb-4 flex flex-wrap gap-4 text-xs">
+
+      <CardContent className="px-3 pb-3 sm:px-6 sm:pb-6">
+        {/* Legend - compact on mobile */}
+        <div className="mb-3 flex flex-wrap gap-3 text-[10px] sm:mb-4 sm:gap-4 sm:text-xs">
           <div className="flex items-center gap-1">
             <div className="h-2 w-2 rounded-full bg-green-500" />
             <span>Paid</span>
@@ -251,14 +319,15 @@ export function FeeCalendar({ year, onFeeClick }: FeeCalendarProps) {
 
         {/* Calendar Grid */}
         <div className="rounded-lg border">
-          {/* Day headers */}
+          {/* Day headers - short on mobile */}
           <div className="grid grid-cols-7 border-b bg-muted/50">
-            {DAYS.map((day) => (
+            {DAYS.map((day, index) => (
               <div
                 key={day}
-                className="px-2 py-2 text-center text-xs font-medium text-muted-foreground"
+                className="px-0.5 py-1.5 text-center text-[10px] font-medium text-muted-foreground sm:px-2 sm:py-2 sm:text-xs"
               >
-                {day}
+                <span className="sm:hidden">{DAYS_SHORT[index]}</span>
+                <span className="hidden sm:inline">{day}</span>
               </div>
             ))}
           </div>
@@ -276,7 +345,7 @@ export function FeeCalendar({ year, onFeeClick }: FeeCalendarProps) {
                     <TooltipTrigger asChild>
                       <div
                         className={cn(
-                          'relative min-h-[80px] border-b border-r p-1 transition-colors',
+                          'relative min-h-[48px] border-b border-r p-0.5 transition-colors sm:min-h-[80px] sm:p-1',
                           !day.isCurrentMonth && 'bg-muted/30 text-muted-foreground',
                           day.isToday && 'bg-blue-50 dark:bg-blue-900/20',
                           status !== 'none' && statusColors[status],
@@ -288,42 +357,63 @@ export function FeeCalendar({ year, onFeeClick }: FeeCalendarProps) {
                           }
                         }}
                       >
+                        {/* Date number */}
                         <span
                           className={cn(
-                            'flex h-6 w-6 items-center justify-center rounded-full text-xs',
+                            'flex h-5 w-5 items-center justify-center rounded-full text-[10px] sm:h-6 sm:w-6 sm:text-xs',
                             day.isToday && 'bg-primary text-primary-foreground font-bold'
                           )}
                         >
                           {day.date.getDate()}
                         </span>
 
+                        {/* Fee indicators */}
                         {day.fees.length > 0 && (
-                          <div className="mt-1 space-y-0.5">
-                            {day.fees.slice(0, 2).map((fee, feeIndex) => (
-                              <div
-                                key={feeIndex}
-                                className={cn(
-                                  'flex items-center gap-1 rounded px-1 py-0.5 text-[10px]',
-                                  fee.is_paid
-                                    ? 'bg-green-200/50 text-green-800 dark:bg-green-800/30 dark:text-green-200'
-                                    : 'bg-amber-200/50 text-amber-800 dark:bg-amber-800/30 dark:text-amber-200'
-                                )}
-                              >
-                                {fee.is_paid ? (
-                                  <Check className="h-2 w-2" />
-                                ) : (
-                                  <DollarSign className="h-2 w-2" />
-                                )}
-                                <span className="truncate">
-                                  {formatCurrency(fee.amount)}
-                                </span>
-                              </div>
-                            ))}
-                            {hasMultipleFees && day.fees.length > 2 && (
-                              <div className="text-center text-[10px] text-muted-foreground">
-                                +{day.fees.length - 2} more
-                              </div>
-                            )}
+                          <div className="mt-0.5 space-y-0.5 sm:mt-1">
+                            {/* Mobile: just show dots */}
+                            <div className="flex justify-center gap-0.5 sm:hidden">
+                              {day.fees.slice(0, 3).map((fee, feeIndex) => (
+                                <div
+                                  key={feeIndex}
+                                  className={cn(
+                                    'h-1.5 w-1.5 rounded-full',
+                                    fee.is_paid ? 'bg-green-500' : 'bg-amber-500'
+                                  )}
+                                />
+                              ))}
+                              {day.fees.length > 3 && (
+                                <span className="text-[8px] text-muted-foreground">+</span>
+                              )}
+                            </div>
+
+                            {/* Desktop: show fee details */}
+                            <div className="hidden sm:block">
+                              {day.fees.slice(0, 2).map((fee, feeIndex) => (
+                                <div
+                                  key={feeIndex}
+                                  className={cn(
+                                    'flex items-center gap-1 rounded px-1 py-0.5 text-[10px]',
+                                    fee.is_paid
+                                      ? 'bg-green-200/50 text-green-800 dark:bg-green-800/30 dark:text-green-200'
+                                      : 'bg-amber-200/50 text-amber-800 dark:bg-amber-800/30 dark:text-amber-200'
+                                  )}
+                                >
+                                  {fee.is_paid ? (
+                                    <Check className="h-2 w-2" />
+                                  ) : (
+                                    <DollarSign className="h-2 w-2" />
+                                  )}
+                                  <span className="truncate">
+                                    {formatCurrency(fee.amount)}
+                                  </span>
+                                </div>
+                              ))}
+                              {hasMultipleFees && day.fees.length > 2 && (
+                                <div className="text-center text-[10px] text-muted-foreground">
+                                  +{day.fees.length - 2} more
+                                </div>
+                              )}
+                            </div>
                           </div>
                         )}
 
@@ -331,7 +421,7 @@ export function FeeCalendar({ year, onFeeClick }: FeeCalendarProps) {
                         {status !== 'none' && (
                           <div
                             className={cn(
-                              'absolute right-1 top-1 h-2 w-2 rounded-full',
+                              'absolute right-0.5 top-0.5 h-1.5 w-1.5 rounded-full sm:right-1 sm:top-1 sm:h-2 sm:w-2',
                               statusDotColors[status]
                             )}
                           />

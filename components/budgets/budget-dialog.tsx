@@ -1,3 +1,17 @@
+/**
+ * Budget Dialog Component
+ *
+ * Mobile-first dialog for creating and editing budget limits.
+ * Handles category-specific or total expense budgets.
+ *
+ * Mobile Optimizations:
+ * - Full screen on mobile with slide-up animation
+ * - Sticky header and footer
+ * - Large touch targets (min 44px)
+ * - Proper input modes for numeric fields
+ *
+ * @module components/budgets/budget-dialog
+ */
 'use client';
 
 import { useState, useEffect } from 'react';
@@ -10,6 +24,7 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
+  DialogBody,
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -21,15 +36,20 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
-import { Loader2 } from 'lucide-react';
+import { Loader2, Wallet, Bell, AlertCircle } from 'lucide-react';
 import { createBudget, updateBudget } from '@/lib/budgets/actions';
 import type { Budget, BudgetPeriod, Category } from '@/lib/types';
 import { BUDGET_PERIOD_LABELS } from '@/lib/types';
 
+/** Props for the BudgetDialog component */
 interface BudgetDialogProps {
+  /** Controls dialog visibility */
   open: boolean;
+  /** Callback when dialog visibility changes */
   onOpenChange: (open: boolean) => void;
+  /** Existing budget for edit mode (optional) */
   budget?: Budget | null;
+  /** Available expense categories for budget assignment */
   categories: Category[];
 }
 
@@ -37,9 +57,11 @@ export function BudgetDialog({ open, onOpenChange, budget, categories }: BudgetD
   const router = useRouter();
   const isEditing = !!budget;
 
+  // Form state
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // Form fields
   const [name, setName] = useState('');
   const [categoryId, setCategoryId] = useState<string>('');
   const [amount, setAmount] = useState('');
@@ -47,7 +69,7 @@ export function BudgetDialog({ open, onOpenChange, budget, categories }: BudgetD
   const [alertThreshold, setAlertThreshold] = useState('80');
   const [alertEnabled, setAlertEnabled] = useState(true);
 
-  // Reset form when dialog opens
+  /** Reset form fields when dialog opens */
   useEffect(() => {
     if (open) {
       setName(budget?.name || '');
@@ -60,6 +82,7 @@ export function BudgetDialog({ open, onOpenChange, budget, categories }: BudgetD
     }
   }, [open, budget]);
 
+  /** Handles form submission for create/update */
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
@@ -89,126 +112,164 @@ export function BudgetDialog({ open, onOpenChange, budget, categories }: BudgetD
   };
 
   // Filter to expense categories only
-  const expenseCategories = categories.filter(c => c.category_type === 'expense');
+  const expenseCategories = categories.filter((c) => c.category_type === 'expense');
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-[500px]">
-        <form onSubmit={handleSubmit}>
+        <form onSubmit={handleSubmit} className="flex h-full flex-col">
           <DialogHeader>
-            <DialogTitle>{isEditing ? 'Edit Budget' : 'Create Budget'}</DialogTitle>
-            <DialogDescription>
-              {isEditing
-                ? 'Update your budget settings.'
-                : 'Set a spending limit for a category.'}
-            </DialogDescription>
+            <div className="flex items-center gap-3">
+              <div className="bg-primary/10 hidden rounded-full p-2.5 sm:flex">
+                <Wallet className="text-primary h-5 w-5" aria-hidden="true" />
+              </div>
+              <div>
+                <DialogTitle>{isEditing ? 'Edit Budget' : 'Create Budget'}</DialogTitle>
+                <DialogDescription>
+                  {isEditing
+                    ? 'Update your budget settings.'
+                    : 'Set a spending limit for a category.'}
+                </DialogDescription>
+              </div>
+            </div>
           </DialogHeader>
 
-          <div className="grid gap-4 py-4">
+          <DialogBody>
+            {/* Error Message */}
             {error && (
-              <div className="rounded-md bg-red-50 p-3 text-sm text-red-600 dark:bg-red-950 dark:text-red-400">
-                {error}
+              <div className="bg-destructive/10 mb-4 flex items-start gap-3 rounded-lg p-4">
+                <AlertCircle
+                  className="text-destructive mt-0.5 h-5 w-5 shrink-0"
+                  aria-hidden="true"
+                />
+                <p className="text-destructive text-sm">{error}</p>
               </div>
             )}
 
-            <div className="grid gap-2">
-              <Label htmlFor="name">Budget Name</Label>
-              <Input
-                id="name"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                placeholder="e.g., Monthly Groceries"
-                required
-              />
-            </div>
-
-            <div className="grid gap-2">
-              <Label htmlFor="category">Category (optional)</Label>
-              <Select value={categoryId} onValueChange={setCategoryId}>
-                <SelectTrigger>
-                  <SelectValue placeholder="All expenses" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="">All expenses</SelectItem>
-                  {expenseCategories.map((cat) => (
-                    <SelectItem key={cat.id} value={cat.id}>
-                      {cat.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <p className="text-xs text-muted-foreground">
-                Leave empty to track all expenses
-              </p>
-            </div>
-
-            <div className="grid grid-cols-2 gap-4">
-              <div className="grid gap-2">
-                <Label htmlFor="amount">Budget Amount ($)</Label>
+            <div className="space-y-4">
+              {/* Budget Name */}
+              <div className="space-y-2">
+                <Label htmlFor="name">Budget Name</Label>
                 <Input
-                  id="amount"
-                  type="number"
-                  min="0"
-                  step="0.01"
-                  value={amount}
-                  onChange={(e) => setAmount(e.target.value)}
-                  placeholder="0.00"
+                  id="name"
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  placeholder="e.g., Monthly Groceries"
+                  className="h-11 sm:h-10"
                   required
+                  autoComplete="off"
                 />
               </div>
 
-              <div className="grid gap-2">
-                <Label htmlFor="period">Period</Label>
-                <Select value={period} onValueChange={(v) => setPeriod(v as BudgetPeriod)}>
-                  <SelectTrigger>
-                    <SelectValue />
+              {/* Category */}
+              <div className="space-y-2">
+                <Label htmlFor="category">
+                  Category <span className="text-muted-foreground text-xs">(optional)</span>
+                </Label>
+                <Select value={categoryId} onValueChange={setCategoryId}>
+                  <SelectTrigger className="h-11 sm:h-10">
+                    <SelectValue placeholder="All expenses" />
                   </SelectTrigger>
                   <SelectContent>
-                    {Object.entries(BUDGET_PERIOD_LABELS).map(([value, label]) => (
-                      <SelectItem key={value} value={value}>
-                        {label}
+                    <SelectItem value="">All expenses</SelectItem>
+                    {expenseCategories.map((cat) => (
+                      <SelectItem key={cat.id} value={cat.id}>
+                        {cat.name}
                       </SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
+                <p className="text-muted-foreground text-xs">Leave empty to track all expenses</p>
               </div>
-            </div>
 
-            <div className="grid gap-2">
-              <Label htmlFor="alertThreshold">Alert Threshold (%)</Label>
-              <Input
-                id="alertThreshold"
-                type="number"
-                min="1"
-                max="100"
-                value={alertThreshold}
-                onChange={(e) => setAlertThreshold(e.target.value)}
-              />
-              <p className="text-xs text-muted-foreground">
-                Get notified when spending reaches this percentage
-              </p>
-            </div>
+              {/* Amount and Period */}
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-2">
+                  <Label htmlFor="amount">Amount ($)</Label>
+                  <Input
+                    id="amount"
+                    type="number"
+                    inputMode="decimal"
+                    min="0"
+                    step="0.01"
+                    value={amount}
+                    onChange={(e) => setAmount(e.target.value)}
+                    placeholder="0.00"
+                    className="h-11 tabular-nums sm:h-10"
+                    required
+                  />
+                </div>
 
-            <div className="flex items-center justify-between rounded-lg border p-3">
-              <div className="space-y-0.5">
-                <Label>Enable Alerts</Label>
-                <p className="text-xs text-muted-foreground">
-                  Receive notifications when approaching limit
+                <div className="space-y-2">
+                  <Label htmlFor="period">Period</Label>
+                  <Select value={period} onValueChange={(v) => setPeriod(v as BudgetPeriod)}>
+                    <SelectTrigger className="h-11 sm:h-10">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {Object.entries(BUDGET_PERIOD_LABELS).map(([value, label]) => (
+                        <SelectItem key={value} value={value}>
+                          {label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+
+              {/* Alert Threshold */}
+              <div className="space-y-2">
+                <Label htmlFor="alertThreshold">Alert Threshold (%)</Label>
+                <Input
+                  id="alertThreshold"
+                  type="number"
+                  inputMode="numeric"
+                  min="1"
+                  max="100"
+                  value={alertThreshold}
+                  onChange={(e) => setAlertThreshold(e.target.value)}
+                  className="h-11 tabular-nums sm:h-10"
+                />
+                <p className="text-muted-foreground text-xs">
+                  Get notified when spending reaches this percentage
                 </p>
               </div>
-              <Switch
-                checked={alertEnabled}
-                onCheckedChange={setAlertEnabled}
-              />
+
+              {/* Alert Toggle */}
+              <div className="hover:bg-muted/50 flex items-center justify-between rounded-lg border p-4 transition-colors">
+                <div className="flex items-center gap-3">
+                  <div className="rounded-full bg-amber-500/10 p-2">
+                    <Bell className="h-4 w-4 text-amber-500" aria-hidden="true" />
+                  </div>
+                  <div>
+                    <Label htmlFor="alert-toggle" className="cursor-pointer font-medium">
+                      Enable Alerts
+                    </Label>
+                    <p className="text-muted-foreground text-xs">
+                      Receive notifications when approaching limit
+                    </p>
+                  </div>
+                </div>
+                <Switch
+                  id="alert-toggle"
+                  checked={alertEnabled}
+                  onCheckedChange={setAlertEnabled}
+                />
+              </div>
             </div>
-          </div>
+          </DialogBody>
 
           <DialogFooter>
-            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => onOpenChange(false)}
+              className="min-h-11 sm:min-h-10"
+            >
               Cancel
             </Button>
-            <Button type="submit" disabled={loading}>
-              {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+            <Button type="submit" disabled={loading} className="min-h-11 sm:min-h-10">
+              {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" aria-hidden="true" />}
               {isEditing ? 'Save Changes' : 'Create Budget'}
             </Button>
           </DialogFooter>

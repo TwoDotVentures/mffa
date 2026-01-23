@@ -1,3 +1,18 @@
+/**
+ * @fileoverview Deduction Dialog Component
+ * @description Modal dialog for adding tax deduction entries with category
+ * selection, amount, receipt tracking, and optional notes.
+ *
+ * @features
+ * - Deduction category selection (WFH, donations, etc.)
+ * - Amount and date input
+ * - Receipt URL tracking
+ * - Optional notes
+ * - Warning display for flagged deductions
+ * - Mobile-optimized form layout
+ *
+ * @mobile Full-width dialog with stacked form fields, touch-friendly inputs
+ */
 'use client';
 
 import { useState } from 'react';
@@ -9,6 +24,7 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
+  DialogBody,
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -27,12 +43,26 @@ import { addDeduction } from '@/lib/deductions/actions';
 import type { DeductionCategory, PersonType } from '@/lib/types';
 import { DEDUCTION_CATEGORY_LABELS } from '@/lib/types';
 
+/** Props interface for DeductionDialog component */
 interface DeductionDialogProps {
+  /** Person to add deduction for */
   person: PersonType;
+  /** Whether dialog is open */
   open: boolean;
+  /** Callback to control dialog open state */
   onOpenChange: (open: boolean) => void;
 }
 
+/**
+ * Deduction Dialog Component
+ *
+ * Provides a comprehensive form for recording tax deductions
+ * with category selection, receipt tracking, and automatic
+ * flagging for unusual amounts.
+ *
+ * @param props - Component props
+ * @returns Rendered deduction dialog
+ */
 export function DeductionDialog({ person, open, onOpenChange }: DeductionDialogProps) {
   const router = useRouter();
   const [isLoading, setIsLoading] = useState(false);
@@ -46,6 +76,10 @@ export function DeductionDialog({ person, open, onOpenChange }: DeductionDialogP
   const [receiptUrl, setReceiptUrl] = useState('');
   const [notes, setNotes] = useState('');
 
+  /**
+   * Handles form submission
+   * @param e - Form event
+   */
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
@@ -73,13 +107,14 @@ export function DeductionDialog({ person, open, onOpenChange }: DeductionDialogP
       } else {
         setError(result.error || 'Failed to add deduction');
       }
-    } catch (err) {
+    } catch {
       setError('An unexpected error occurred');
     } finally {
       setIsLoading(false);
     }
   };
 
+  /** Resets form to initial state */
   const resetForm = () => {
     setCategory('work_from_home');
     setDescription('');
@@ -96,109 +131,141 @@ export function DeductionDialog({ person, open, onOpenChange }: DeductionDialogP
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-[500px]">
-        <DialogHeader>
-          <DialogTitle>Add Deduction for {personName}</DialogTitle>
-          <DialogDescription>
-            Record work-related expenses, donations, or other tax deductions.
-          </DialogDescription>
-        </DialogHeader>
+        <form onSubmit={handleSubmit} className="flex h-full flex-col">
+          <DialogHeader>
+            <DialogTitle className="text-base sm:text-lg">
+              Add Deduction for {personName}
+            </DialogTitle>
+            <DialogDescription className="text-xs sm:text-sm">
+              Record work-related expenses, donations, or other tax deductions.
+            </DialogDescription>
+          </DialogHeader>
 
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div className="grid gap-4 md:grid-cols-2">
-            <div className="space-y-2">
-              <Label htmlFor="category">Category</Label>
-              <Select
-                value={category}
-                onValueChange={(value) => setCategory(value as DeductionCategory)}
-              >
-                <SelectTrigger id="category">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {Object.entries(DEDUCTION_CATEGORY_LABELS).map(([value, label]) => (
-                    <SelectItem key={value} value={value}>
-                      {label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+          <DialogBody className="space-y-4">
+            {/* Category & Date */}
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 sm:gap-4">
+              <div className="space-y-1.5">
+                <Label htmlFor="category" className="text-xs sm:text-sm">
+                  Category
+                </Label>
+                <Select
+                  value={category}
+                  onValueChange={(value) => setCategory(value as DeductionCategory)}
+                >
+                  <SelectTrigger id="category" className="h-10 text-sm sm:h-9">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {Object.entries(DEDUCTION_CATEGORY_LABELS).map(([value, label]) => (
+                      <SelectItem key={value} value={value}>
+                        {label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-1.5">
+                <Label htmlFor="date" className="text-xs sm:text-sm">
+                  Date
+                </Label>
+                <Input
+                  id="date"
+                  type="date"
+                  value={date}
+                  onChange={(e) => setDate(e.target.value)}
+                  required
+                  className="h-10 text-sm sm:h-9"
+                />
+              </div>
             </div>
 
-            <div className="space-y-2">
-              <Label htmlFor="date">Date</Label>
+            {/* Description */}
+            <div className="space-y-1.5">
+              <Label htmlFor="description" className="text-xs sm:text-sm">
+                Description
+              </Label>
               <Input
-                id="date"
-                type="date"
-                value={date}
-                onChange={(e) => setDate(e.target.value)}
+                id="description"
+                placeholder="e.g., Home office internet, Professional membership"
+                value={description}
+                onChange={(e) => setDescription(e.target.value)}
                 required
-              />
-            </div>
-          </div>
-
-          <div className="space-y-2">
-            <Label htmlFor="description">Description</Label>
-            <Input
-              id="description"
-              placeholder="e.g., Home office internet, Professional membership"
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-              required
-            />
-          </div>
-
-          <div className="grid gap-4 md:grid-cols-2">
-            <div className="space-y-2">
-              <Label htmlFor="amount">Amount ($)</Label>
-              <Input
-                id="amount"
-                type="number"
-                step="0.01"
-                min="0"
-                placeholder="0.00"
-                value={amount}
-                onChange={(e) => setAmount(e.target.value)}
-                required
+                className="h-10 text-sm sm:h-9"
               />
             </div>
 
-            <div className="space-y-2">
-              <Label htmlFor="receiptUrl">Receipt URL (optional)</Label>
-              <Input
-                id="receiptUrl"
-                type="url"
-                placeholder="https://..."
-                value={receiptUrl}
-                onChange={(e) => setReceiptUrl(e.target.value)}
+            {/* Amount & Receipt URL */}
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 sm:gap-4">
+              <div className="space-y-1.5">
+                <Label htmlFor="amount" className="text-xs sm:text-sm">
+                  Amount ($)
+                </Label>
+                <Input
+                  id="amount"
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  placeholder="0.00"
+                  value={amount}
+                  onChange={(e) => setAmount(e.target.value)}
+                  required
+                  className="h-10 text-sm sm:h-9"
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <Label htmlFor="receiptUrl" className="text-xs sm:text-sm">
+                  Receipt URL (optional)
+                </Label>
+                <Input
+                  id="receiptUrl"
+                  type="url"
+                  placeholder="https://..."
+                  value={receiptUrl}
+                  onChange={(e) => setReceiptUrl(e.target.value)}
+                  className="h-10 text-sm sm:h-9"
+                />
+              </div>
+            </div>
+
+            {/* Notes */}
+            <div className="space-y-1.5">
+              <Label htmlFor="notes" className="text-xs sm:text-sm">
+                Notes (optional)
+              </Label>
+              <Textarea
+                id="notes"
+                placeholder="Any additional details..."
+                value={notes}
+                onChange={(e) => setNotes(e.target.value)}
+                rows={2}
+                className="resize-none text-sm"
               />
             </div>
-          </div>
 
-          <div className="space-y-2">
-            <Label htmlFor="notes">Notes (optional)</Label>
-            <Textarea
-              id="notes"
-              placeholder="Any additional details..."
-              value={notes}
-              onChange={(e) => setNotes(e.target.value)}
-              rows={2}
-            />
-          </div>
+            {/* Warning Display */}
+            {warning && (
+              <Alert className="py-2">
+                <AlertTriangle className="h-4 w-4" />
+                <AlertDescription className="text-xs sm:text-sm">{warning}</AlertDescription>
+              </Alert>
+            )}
 
-          {warning && (
-            <Alert>
-              <AlertTriangle className="h-4 w-4" />
-              <AlertDescription>{warning}</AlertDescription>
-            </Alert>
-          )}
-
-          {error && <p className="text-sm text-destructive">{error}</p>}
+            {/* Error Display */}
+            {error && <p className="text-destructive text-xs sm:text-sm">{error}</p>}
+          </DialogBody>
 
           <DialogFooter>
-            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => onOpenChange(false)}
+              className="min-h-11 sm:min-h-10"
+            >
               Cancel
             </Button>
-            <Button type="submit" disabled={isLoading}>
+            <Button type="submit" disabled={isLoading} className="min-h-11 sm:min-h-10">
               {isLoading ? 'Adding...' : 'Add Deduction'}
             </Button>
           </DialogFooter>

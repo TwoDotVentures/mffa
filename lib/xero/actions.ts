@@ -1,3 +1,9 @@
+/**
+ * @fileoverview Server actions for Xero accounting integration.
+ * Manages OAuth connections, account mappings, and transaction syncing with Xero.
+ * @module lib/xero/actions
+ */
+
 'use server';
 
 import { createClient } from '@/lib/supabase/server';
@@ -29,8 +35,14 @@ import { findBestMatch, mapXeroTypeToMFFAType } from './matching';
 import { DEFAULT_USER_ID } from '@/lib/constants';
 
 /**
- * Start Xero OAuth flow - returns the authorization URL
- * @param userId - User ID (defaults to family default since app has no auth)
+ * Initiates the Xero OAuth flow by generating an authorization URL.
+ * Stores a state token in cookies for CSRF protection.
+ *
+ * @param userId - Optional user ID (defaults to family default since app has no auth)
+ * @returns Promise resolving to URL for redirect or error message
+ * @example
+ * const { url, error } = await initiateXeroAuth();
+ * if (url) redirect(url);
  */
 export async function initiateXeroAuth(userId?: string): Promise<{ url: string | null; error: string | null }> {
   try {
@@ -645,7 +657,7 @@ export async function reviewXeroAccounts(
       .eq('connection_id', connectionId);
 
     const mappingsMap = new Map(
-      (existingMappings || []).map(m => [m.xero_account_id, m])
+      ((existingMappings || []) as XeroAccountMappingDB[]).map((m: XeroAccountMappingDB) => [m.xero_account_id, m])
     );
 
     // Build comparison results
@@ -1040,7 +1052,8 @@ export async function getAvailableXeroAccountsForLinking(): Promise<{
       return { accounts: [], error: error.message };
     }
 
-    const accounts = (mappings || []).map(m => ({
+    type MappingRec = { id: string; connection_id: string; xero_account_id: string; xero_account_name?: string; xero_account_code?: string; local_account_id?: string | null };
+    const accounts = ((mappings || []) as MappingRec[]).map((m: MappingRec) => ({
       id: m.id,
       connectionId: m.connection_id,
       xeroAccountId: m.xero_account_id,

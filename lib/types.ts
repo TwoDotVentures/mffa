@@ -1,5 +1,7 @@
 // Database types for Moyle Family Finance App
 
+import type { Json } from './supabase/database.types';
+
 export type AccountType = 'bank' | 'credit' | 'investment' | 'loan' | 'cash';
 export type AccountGroup = 'family' | 'trust' | 'smsf';
 export type TransactionType = 'income' | 'expense' | 'transfer';
@@ -163,6 +165,41 @@ export interface TransactionFilters {
   search?: string;
   minAmount?: number;
   maxAmount?: number;
+}
+
+/**
+ * Extended filters for paginated transaction queries.
+ * Includes pagination, sorting, and filter options.
+ */
+export interface PaginatedTransactionOptions extends TransactionFilters {
+  /** Page number (1-indexed). Default: 1 */
+  page?: number;
+  /** Number of items per page. Default: 100 */
+  limit?: number;
+  /** Field to sort by. Default: 'date' */
+  sortField?: 'date' | 'amount' | 'payee' | 'description';
+  /** Sort direction. Default: 'desc' */
+  sortDirection?: 'asc' | 'desc';
+  /** Filter for uncategorised transactions only */
+  uncategorisedOnly?: boolean;
+}
+
+/**
+ * Result from a paginated transaction query.
+ */
+export interface PaginatedTransactionsResult {
+  /** Array of transactions for the current page */
+  data: Transaction[];
+  /** Total number of transactions matching filters (across all pages) */
+  totalCount: number;
+  /** Whether there are more pages after this one */
+  hasMore: boolean;
+  /** Current page number (1-indexed) */
+  page: number;
+  /** Number of items per page */
+  limit: number;
+  /** Total number of pages */
+  totalPages: number;
 }
 
 // ============================================
@@ -390,7 +427,7 @@ export interface Deduction {
   receipt_url: string | null;
   linked_transaction_id: string | null;
   calculation_method: string | null;
-  calculation_details: Record<string, unknown> | null;
+  calculation_details: Json | null;
   notes: string | null;
   created_at: string;
   updated_at: string;
@@ -406,7 +443,7 @@ export interface DeductionFormData {
   receipt_url?: string;
   linked_transaction_id?: string;
   calculation_method?: string;
-  calculation_details?: Record<string, unknown>;
+  calculation_details?: Json;
   notes?: string;
 }
 
@@ -1108,7 +1145,7 @@ export interface Notification {
   link_url: string | null;
   related_entity_type: string | null;
   related_entity_id: string | null;
-  metadata: Record<string, unknown> | null;
+  metadata: Json | null;
   created_at: string;
   updated_at: string;
 }
@@ -1123,7 +1160,7 @@ export interface CreateNotificationData {
   link_url?: string;
   related_entity_type?: string;
   related_entity_id?: string;
-  metadata?: Record<string, unknown>;
+  metadata?: Json;
 }
 
 export const NOTIFICATION_TYPE_LABELS: Record<NotificationType, string> = {
@@ -1647,3 +1684,407 @@ export const MEMBER_TYPE_LABELS: Record<MemberType, string> = {
   adult: 'Adult',
   child: 'Child',
 };
+
+// ============================================
+// Generic Utility Types
+// ============================================
+
+/**
+ * Generic dialog props for consistent dialog components
+ */
+export interface BaseDialogProps {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+}
+
+/**
+ * Generic dialog props with optional entity for edit mode
+ */
+export interface EntityDialogProps<T> extends BaseDialogProps {
+  entity?: T;
+  onSuccess?: () => void;
+}
+
+/**
+ * Generic list component props
+ */
+export interface BaseListProps<T> {
+  items: T[];
+  loading?: boolean;
+  onEdit?: (item: T) => void;
+  onDelete?: (item: T) => void;
+}
+
+/**
+ * Generic form field props
+ */
+export interface FormFieldProps<T = string> {
+  value: T;
+  onChange: (value: T) => void;
+  error?: string;
+  disabled?: boolean;
+  placeholder?: string;
+}
+
+/**
+ * Type for database insert operations - makes id and timestamps optional
+ */
+export type DatabaseInsert<T> = Omit<T, 'id' | 'created_at' | 'updated_at'> & {
+  id?: string;
+  created_at?: string;
+  updated_at?: string;
+};
+
+/**
+ * Type for database update operations - all fields optional except id
+ */
+export type DatabaseUpdate<T> = Partial<Omit<T, 'id'>> & {
+  updated_at?: string;
+};
+
+/**
+ * Async action result type for server actions
+ */
+export interface ActionResult<T = void> {
+  success: boolean;
+  error?: string;
+  data?: T;
+}
+
+/**
+ * Paginated response type
+ */
+export interface PaginatedResponse<T> {
+  items: T[];
+  total: number;
+  page: number;
+  pageSize: number;
+  hasMore: boolean;
+}
+
+// ============================================
+// Type Guards
+// ============================================
+
+/**
+ * Type guard to check if a value is a valid AccountType
+ */
+export function isAccountType(value: unknown): value is AccountType {
+  return typeof value === 'string' && ['bank', 'credit', 'investment', 'loan', 'cash'].includes(value);
+}
+
+/**
+ * Type guard to check if a value is a valid TransactionType
+ */
+export function isTransactionType(value: unknown): value is TransactionType {
+  return typeof value === 'string' && ['income', 'expense', 'transfer'].includes(value);
+}
+
+/**
+ * Type guard to check if a value is a valid PersonType
+ */
+export function isPersonType(value: unknown): value is PersonType {
+  return typeof value === 'string' && ['grant', 'shannon', 'joint'].includes(value);
+}
+
+/**
+ * Type guard to check if a value is a valid DeductionCategory
+ */
+export function isDeductionCategory(value: unknown): value is DeductionCategory {
+  const validCategories: DeductionCategory[] = [
+    'work_from_home', 'vehicle', 'travel', 'clothing_laundry', 'self_education',
+    'tools_equipment', 'professional_subscriptions', 'union_fees', 'phone_internet',
+    'donations', 'income_protection', 'tax_agent_fees', 'investment_expenses',
+    'rental_property', 'other'
+  ];
+  return typeof value === 'string' && validCategories.includes(value as DeductionCategory);
+}
+
+/**
+ * Type guard to check if a value is a valid BudgetPeriod
+ */
+export function isBudgetPeriod(value: unknown): value is BudgetPeriod {
+  return typeof value === 'string' && ['weekly', 'fortnightly', 'monthly', 'quarterly', 'yearly'].includes(value);
+}
+
+/**
+ * Type guard for nullable values
+ */
+export function isNonNullable<T>(value: T): value is NonNullable<T> {
+  return value !== null && value !== undefined;
+}
+
+/**
+ * Type guard to check if object has a specific property
+ */
+export function hasProperty<K extends string>(
+  obj: unknown,
+  key: K
+): obj is Record<K, unknown> {
+  return typeof obj === 'object' && obj !== null && key in obj;
+}
+
+// ============================================
+// Database Row Types (for Supabase operations)
+// ============================================
+
+/**
+ * Family member database insert type
+ */
+export interface FamilyMemberInsert {
+  name: string;
+  member_type: MemberType;
+  relationship?: RelationshipType | null;
+  gender?: GenderType | null;
+  date_of_birth?: string | null;
+  email?: string | null;
+  phone?: string | null;
+  medicare_number?: string | null;
+  notes?: string | null;
+  is_primary?: boolean;
+  user_id?: string;
+}
+
+/**
+ * School database insert type
+ */
+export interface SchoolInsert {
+  name: string;
+  school_type: SchoolType;
+  sector?: SchoolSector | null;
+  address?: string | null;
+  suburb?: string | null;
+  state: string;
+  postcode?: string | null;
+  phone?: string | null;
+  email?: string | null;
+  website?: string | null;
+  notes?: string | null;
+  user_id?: string;
+}
+
+/**
+ * Deduction database insert type
+ */
+export interface DeductionInsert {
+  user_id: string;
+  person: PersonType;
+  category: DeductionCategory;
+  description: string;
+  amount: number;
+  date: string;
+  financial_year: string;
+  is_approved?: boolean;
+  receipt_url?: string | null;
+  linked_transaction_id?: string | null;
+  calculation_method?: string | null;
+  calculation_details?: Json | null;
+  notes?: string | null;
+}
+
+/**
+ * Notification database insert type
+ */
+export interface NotificationInsert {
+  user_id: string;
+  title: string;
+  message: string;
+  notification_type: NotificationType;
+  priority?: NotificationPriority;
+  scheduled_for?: string | null;
+  expires_at?: string | null;
+  link_url?: string | null;
+  related_entity_type?: string | null;
+  related_entity_id?: string | null;
+  metadata?: Json;
+}
+
+/**
+ * SMSF member database insert type
+ */
+export interface SmsfMemberInsert {
+  fund_id: string;
+  name: string;
+  date_of_birth?: string | null;
+  preservation_age?: number | null;
+  total_super_balance?: number;
+  member_status?: 'accumulation' | 'transition_to_retirement' | 'pension';
+}
+
+/**
+ * SMSF contribution database insert type
+ */
+export interface SmsfContributionInsert {
+  fund_id: string;
+  member_id: string;
+  contribution_type: 'concessional' | 'non_concessional' | 'government_co_contribution' | 'spouse' | 'downsizer';
+  amount: number;
+  date: string;
+  financial_year: string;
+  description?: string | null;
+}
+
+/**
+ * SMSF transaction database insert type
+ */
+export interface SmsfTransactionInsert {
+  fund_id: string;
+  investment_id?: string | null;
+  member_id?: string | null;
+  type: 'contribution' | 'pension_payment' | 'lump_sum' | 'investment_income' | 'investment_purchase' | 'investment_sale' | 'fee' | 'tax' | 'transfer_in' | 'transfer_out' | 'other';
+  amount: number;
+  date: string;
+  financial_year: string;
+  description?: string | null;
+}
+
+/**
+ * Extracurricular update type - compatible with Partial<ExtracurricularFormData>
+ */
+export interface ExtracurricularUpdate {
+  is_active?: boolean;
+  name?: string;
+  provider?: string;
+  venue?: string;
+  day_of_week?: string[];
+  time_start?: string;
+  time_end?: string;
+  cost_amount?: number;
+  notes?: string;
+}
+
+// ============================================
+// Transaction with Category (for AI tools)
+// ============================================
+
+/**
+ * Transaction with joined category for filtering operations
+ */
+export interface TransactionWithCategory {
+  id: string;
+  date: string;
+  description: string;
+  amount: number;
+  transaction_type: TransactionType;
+  payee: string | null;
+  account?: { name?: string } | null;
+  category?: { name?: string } | null;
+}
+
+/**
+ * Trust distribution with beneficiary
+ */
+export interface TrustDistributionWithBeneficiary extends Omit<TrustDistribution, 'beneficiary'> {
+  beneficiary?: { name?: string } | null;
+}
+
+/**
+ * Beneficiary distribution accumulator type
+ */
+export interface BeneficiaryDistributionAccumulator {
+  total: number;
+  franking: number;
+  distributions: Array<{
+    date: string;
+    amount: number;
+    frankingStreamed: number;
+    type: TrustDistributionType;
+    isPaid: boolean;
+  }>;
+}
+
+// ============================================
+// AI Tool Helper Types
+// ============================================
+
+/**
+ * Account record from database queries
+ */
+export interface AccountRecord {
+  id: string;
+  name: string;
+  account_type: string;
+  institution?: string | null;
+  current_balance: number | null;
+  credit_limit?: number | null;
+  is_active?: boolean;
+}
+
+/**
+ * SMSF Member balance record
+ */
+export interface SmsfMemberBalanceRecord {
+  total_super_balance: number | null;
+  name?: string;
+}
+
+/**
+ * SMSF Investment record
+ */
+export interface SmsfInvestmentRecord {
+  asset_type: string;
+  name?: string;
+  current_value: number;
+  cost_base: number;
+  income_ytd?: number;
+}
+
+/**
+ * SMSF Contribution record
+ */
+export interface SmsfContributionRecord {
+  contribution_type: string;
+  amount: number;
+  date?: string;
+  member?: { name?: string };
+}
+
+/**
+ * SMSF Carry Forward record
+ */
+export interface SmsfCarryForwardRecord {
+  financial_year: string;
+  unused_amount: number;
+  eligible_for_carry_forward: boolean;
+}
+
+/**
+ * Trust Income record
+ */
+export interface TrustIncomeRecord {
+  source: string;
+  income_type: string;
+  amount: number;
+  franking_credits: number;
+  date: string;
+}
+
+/**
+ * Trust Distribution record
+ */
+export interface TrustDistributionRecord {
+  beneficiary_id: string;
+  beneficiary?: { name?: string };
+  amount: number;
+  franking_credits_streamed: number;
+  capital_gains_streamed?: number;
+  distribution_type: string;
+  date: string;
+  is_paid: boolean;
+}
+
+/**
+ * Trust Beneficiary record
+ */
+export interface TrustBeneficiaryRecord {
+  id: string;
+  name: string;
+  beneficiary_type: string;
+}
+
+/**
+ * Investment by type accumulator
+ */
+export interface InvestmentByTypeAccumulator {
+  [key: string]: number;
+}

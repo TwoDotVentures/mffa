@@ -1,3 +1,14 @@
+/**
+ * TransactionDialog Component
+ *
+ * Modal dialog for creating and editing transactions.
+ * Fully optimized for mobile with full-screen presentation,
+ * large input fields, and touch-friendly controls.
+ *
+ * @mobile Full-screen dialog with large touch targets
+ * @desktop Standard modal dialog with compact layout
+ * @a11y Proper form labeling and keyboard navigation
+ */
 'use client';
 
 import { useState, useEffect } from 'react';
@@ -10,6 +21,7 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
+  DialogBody,
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -26,14 +38,23 @@ import { createTransaction, updateTransaction, createCategory } from '@/lib/tran
 import { toast } from 'sonner';
 import type { Transaction, TransactionType, Account, Category } from '@/lib/types';
 
+/** Props for TransactionDialog component */
 interface TransactionDialogProps {
+  /** Whether the dialog is open */
   open: boolean;
+  /** Callback when dialog open state changes */
   onOpenChange: (open: boolean) => void;
+  /** Transaction to edit (null for new transaction) */
   transaction?: Transaction | null;
+  /** Available accounts for selection */
   accounts: Account[];
+  /** Available categories for selection */
   categories: Category[];
 }
 
+/**
+ * Dialog for creating or editing transactions with mobile-optimized layout
+ */
 export function TransactionDialog({
   open,
   onOpenChange,
@@ -44,6 +65,7 @@ export function TransactionDialog({
   const router = useRouter();
   const isEditing = !!transaction;
 
+  // Form state
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -55,6 +77,7 @@ export function TransactionDialog({
   const [newCategoryLoading, setNewCategoryLoading] = useState(false);
   const [localCategories, setLocalCategories] = useState<Category[]>(categories);
 
+  // Transaction fields
   const [accountId, setAccountId] = useState(transaction?.account_id || '');
   const [categoryId, setCategoryId] = useState(transaction?.category_id || '');
   const [date, setDate] = useState(transaction?.date || new Date().toISOString().split('T')[0]);
@@ -66,6 +89,7 @@ export function TransactionDialog({
   const [payee, setPayee] = useState(transaction?.payee || '');
   const [notes, setNotes] = useState(transaction?.notes || '');
 
+  // Reset form when transaction changes
   useEffect(() => {
     if (transaction) {
       setAccountId(transaction.account_id);
@@ -86,6 +110,7 @@ export function TransactionDialog({
       setPayee('');
       setNotes('');
     }
+    setError(null);
   }, [transaction, accounts]);
 
   // Update local categories when prop changes
@@ -93,7 +118,9 @@ export function TransactionDialog({
     setLocalCategories(categories);
   }, [categories]);
 
-  // Handle creating a new category
+  /**
+   * Creates a new category and selects it
+   */
   const handleCreateCategory = async () => {
     if (!newCategoryName.trim()) return;
 
@@ -102,7 +129,9 @@ export function TransactionDialog({
 
     if (result.success && result.category) {
       toast.success(`Created category "${result.category.name}"`);
-      setLocalCategories(prev => [...prev, result.category!].sort((a, b) => a.name.localeCompare(b.name)));
+      setLocalCategories((prev) =>
+        [...prev, result.category!].sort((a, b) => a.name.localeCompare(b.name))
+      );
       setCategoryId(result.category.id);
       setNewCategoryName('');
       setShowNewCategoryInput(false);
@@ -114,6 +143,9 @@ export function TransactionDialog({
     setNewCategoryLoading(false);
   };
 
+  /**
+   * Handles form submission for creating/updating transaction
+   */
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
@@ -144,8 +176,7 @@ export function TransactionDialog({
     setLoading(false);
   };
 
-  // Show all categories, grouped by type for better UX
-  // First show categories matching the transaction type, then others
+  // Sort categories: matching type first, then alphabetically
   const sortedCategories = [...localCategories].sort((a, b) => {
     const aMatches = a.category_type === transactionType ? 0 : 1;
     const bMatches = b.category_type === transactionType ? 0 : 1;
@@ -153,53 +184,61 @@ export function TransactionDialog({
     return a.name.localeCompare(b.name);
   });
 
-  // Filter categories for search
-  const filteredCategories = sortedCategories.filter(cat =>
+  // Filter categories by search term
+  const filteredCategories = sortedCategories.filter((cat) =>
     cat.name.toLowerCase().includes(categorySearch.toLowerCase())
   );
 
-  // Get selected category name
-  const selectedCategoryName = localCategories.find(c => c.id === categoryId)?.name;
+  // Get selected category name for display
+  const selectedCategoryName = localCategories.find((c) => c.id === categoryId)?.name;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-[500px]">
-        <form onSubmit={handleSubmit}>
+        <form onSubmit={handleSubmit} className="flex h-full flex-col">
           <DialogHeader>
-            <DialogTitle>{isEditing ? 'Edit Transaction' : 'Add Transaction'}</DialogTitle>
-            <DialogDescription>
+            <DialogTitle className="text-lg">
+              {isEditing ? 'Edit Transaction' : 'Add Transaction'}
+            </DialogTitle>
+            <DialogDescription className="text-sm">
               {isEditing ? 'Update transaction details.' : 'Add a new transaction.'}
             </DialogDescription>
           </DialogHeader>
 
-          {error && (
-            <div className="mt-4 rounded-md bg-destructive/10 p-3 text-sm text-destructive">
-              {error}
-            </div>
-          )}
-
-          <div className="mt-4 grid gap-4">
-            <div className="grid grid-cols-2 gap-4">
-              <div className="grid gap-2">
-                <Label htmlFor="date">Date *</Label>
+          <DialogBody className="space-y-4">
+            {/* Error Display */}
+            {error && (
+              <div className="bg-destructive/10 text-destructive rounded-md p-3 text-sm">
+                {error}
+              </div>
+            )}
+            {/* Date and Type Row */}
+            <div className="grid grid-cols-2 gap-3 sm:gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="date" className="text-sm font-medium">
+                  Date *
+                </Label>
                 <Input
                   id="date"
                   type="date"
                   value={date}
                   onChange={(e) => setDate(e.target.value)}
                   required
+                  className="h-11 sm:h-10"
                 />
               </div>
-              <div className="grid gap-2">
-                <Label htmlFor="type">Type *</Label>
+              <div className="space-y-2">
+                <Label htmlFor="type" className="text-sm font-medium">
+                  Type *
+                </Label>
                 <Select
                   value={transactionType}
                   onValueChange={(v) => {
                     setTransactionType(v as TransactionType);
-                    setCategoryId('');
+                    setCategoryId(''); // Reset category when type changes
                   }}
                 >
-                  <SelectTrigger>
+                  <SelectTrigger className="h-11 sm:h-10">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
@@ -211,10 +250,13 @@ export function TransactionDialog({
               </div>
             </div>
 
-            <div className="grid gap-2">
-              <Label htmlFor="account">Account *</Label>
+            {/* Account Selection */}
+            <div className="space-y-2">
+              <Label htmlFor="account" className="text-sm font-medium">
+                Account *
+              </Label>
               <Select value={accountId} onValueChange={setAccountId}>
-                <SelectTrigger>
+                <SelectTrigger className="h-11 sm:h-10">
                   <SelectValue placeholder="Select account" />
                 </SelectTrigger>
                 <SelectContent>
@@ -227,69 +269,82 @@ export function TransactionDialog({
               </Select>
             </div>
 
-            <div className="grid gap-2">
-              <Label htmlFor="description">Description *</Label>
+            {/* Description */}
+            <div className="space-y-2">
+              <Label htmlFor="description" className="text-sm font-medium">
+                Description *
+              </Label>
               <Input
                 id="description"
                 value={description}
                 onChange={(e) => setDescription(e.target.value)}
                 placeholder="e.g., Woolworths groceries"
                 required
+                className="h-11 sm:h-10"
               />
             </div>
 
-            <div className="grid grid-cols-2 gap-4">
-              <div className="grid gap-2">
-                <Label htmlFor="amount">Amount *</Label>
+            {/* Amount and Category Row */}
+            <div className="grid grid-cols-2 gap-3 sm:gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="amount" className="text-sm font-medium">
+                  Amount *
+                </Label>
                 <div className="relative">
-                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground">
+                  <span className="text-muted-foreground absolute top-1/2 left-3 -translate-y-1/2">
                     $
                   </span>
                   <Input
                     id="amount"
                     type="number"
                     step="0.01"
+                    inputMode="decimal"
                     value={amount}
                     onChange={(e) => setAmount(e.target.value)}
-                    className="pl-7"
+                    className="h-11 pl-7 sm:h-10"
                     placeholder="0.00"
                     required
                   />
                 </div>
               </div>
-              <div className="grid gap-2">
-                <Label htmlFor="category">Category</Label>
-                <Popover open={categoryPickerOpen} onOpenChange={(open) => {
-                  setCategoryPickerOpen(open);
-                  if (!open) {
-                    setCategorySearch('');
-                    setShowNewCategoryInput(false);
-                    setNewCategoryName('');
-                  }
-                }}>
+              <div className="space-y-2">
+                <Label htmlFor="category" className="text-sm font-medium">
+                  Category
+                </Label>
+                <Popover
+                  open={categoryPickerOpen}
+                  onOpenChange={(open) => {
+                    setCategoryPickerOpen(open);
+                    if (!open) {
+                      setCategorySearch('');
+                      setShowNewCategoryInput(false);
+                      setNewCategoryName('');
+                    }
+                  }}
+                >
                   <PopoverTrigger asChild>
                     <Button
                       variant="outline"
                       role="combobox"
-                      className="justify-between font-normal"
+                      className="h-11 w-full justify-between font-normal sm:h-10"
                     >
-                      {selectedCategoryName || 'Uncategorised'}
+                      <span className="truncate">{selectedCategoryName || 'Uncategorised'}</span>
                       <ChevronDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
                     </Button>
                   </PopoverTrigger>
-                  <PopoverContent className="w-[220px] p-2" align="start">
+                  <PopoverContent className="w-[250px] p-2" align="start">
                     <Input
                       placeholder="Search categories..."
                       value={categorySearch}
                       onChange={(e) => setCategorySearch(e.target.value)}
-                      className="h-8 mb-2"
+                      className="mb-2 h-10"
                       autoFocus
                     />
-                    <div className="max-h-[200px] overflow-y-auto space-y-0.5">
+                    <div className="max-h-[200px] space-y-0.5 overflow-y-auto">
                       {!categorySearch && (
                         <button
                           type="button"
-                          className={`w-full text-left px-2 py-1.5 text-sm rounded hover:bg-muted transition-colors ${!categoryId ? 'bg-muted' : ''}`}
+                          className={`hover:bg-muted w-full rounded px-2 py-2 text-left text-sm transition-colors ${!categoryId ? 'bg-muted' : ''}`}
                           onClick={() => {
                             setCategoryId('');
                             setCategoryPickerOpen(false);
@@ -302,7 +357,7 @@ export function TransactionDialog({
                         <button
                           type="button"
                           key={category.id}
-                          className={`w-full text-left px-2 py-1.5 text-sm rounded hover:bg-muted transition-colors ${categoryId === category.id ? 'bg-muted' : ''}`}
+                          className={`hover:bg-muted w-full rounded px-2 py-2 text-left text-sm transition-colors ${categoryId === category.id ? 'bg-muted' : ''}`}
                           onClick={() => {
                             setCategoryId(category.id);
                             setCategoryPickerOpen(false);
@@ -312,19 +367,19 @@ export function TransactionDialog({
                         </button>
                       ))}
                       {filteredCategories.length === 0 && categorySearch && (
-                        <p className="text-sm text-muted-foreground text-center py-2">
+                        <p className="text-muted-foreground py-2 text-center text-sm">
                           No categories found
                         </p>
                       )}
                     </div>
-                    <div className="border-t mt-2 pt-2">
+                    <div className="mt-2 border-t pt-2">
                       {showNewCategoryInput ? (
                         <div className="space-y-2">
                           <Input
                             placeholder="New category name..."
                             value={newCategoryName}
                             onChange={(e) => setNewCategoryName(e.target.value)}
-                            className="h-8"
+                            className="h-10"
                             autoFocus
                             onKeyDown={(e) => {
                               if (e.key === 'Enter') {
@@ -340,18 +395,20 @@ export function TransactionDialog({
                             <Button
                               type="button"
                               size="sm"
-                              className="flex-1 h-7"
+                              className="h-9 flex-1"
                               onClick={handleCreateCategory}
                               disabled={newCategoryLoading || !newCategoryName.trim()}
                             >
-                              {newCategoryLoading && <Loader2 className="mr-1 h-3 w-3 animate-spin" />}
+                              {newCategoryLoading && (
+                                <Loader2 className="mr-1 h-3 w-3 animate-spin" />
+                              )}
                               Add
                             </Button>
                             <Button
                               type="button"
                               size="sm"
                               variant="ghost"
-                              className="h-7"
+                              className="h-9"
                               onClick={() => {
                                 setShowNewCategoryInput(false);
                                 setNewCategoryName('');
@@ -364,7 +421,7 @@ export function TransactionDialog({
                       ) : (
                         <button
                           type="button"
-                          className="w-full text-left px-2 py-1.5 text-sm rounded hover:bg-muted transition-colors flex items-center gap-1 text-primary"
+                          className="hover:bg-muted text-primary flex w-full items-center gap-1 rounded px-2 py-2 text-left text-sm transition-colors"
                           onClick={() => setShowNewCategoryInput(true)}
                         >
                           <Plus className="h-3.5 w-3.5" />
@@ -377,32 +434,45 @@ export function TransactionDialog({
               </div>
             </div>
 
-            <div className="grid gap-2">
-              <Label htmlFor="payee">Payee</Label>
+            {/* Payee */}
+            <div className="space-y-2">
+              <Label htmlFor="payee" className="text-sm font-medium">
+                Payee
+              </Label>
               <Input
                 id="payee"
                 value={payee}
                 onChange={(e) => setPayee(e.target.value)}
                 placeholder="e.g., Woolworths"
+                className="h-11 sm:h-10"
               />
             </div>
 
-            <div className="grid gap-2">
-              <Label htmlFor="notes">Notes</Label>
+            {/* Notes */}
+            <div className="space-y-2">
+              <Label htmlFor="notes" className="text-sm font-medium">
+                Notes
+              </Label>
               <Input
                 id="notes"
                 value={notes}
                 onChange={(e) => setNotes(e.target.value)}
                 placeholder="Optional notes..."
+                className="h-11 sm:h-10"
               />
             </div>
-          </div>
+          </DialogBody>
 
-          <DialogFooter className="mt-6">
-            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => onOpenChange(false)}
+              className="min-h-11 sm:min-h-10"
+            >
               Cancel
             </Button>
-            <Button type="submit" disabled={loading || !accountId}>
+            <Button type="submit" disabled={loading || !accountId} className="min-h-11 sm:min-h-10">
               {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
               {isEditing ? 'Save Changes' : 'Add Transaction'}
             </Button>

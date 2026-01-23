@@ -1,3 +1,19 @@
+/**
+ * @fileoverview Income Dialog Component
+ * @description Modal dialog for adding income entries with type selection,
+ * amount, franking credits, and tax withheld tracking.
+ *
+ * @features
+ * - Income type selection (salary, dividend, trust, etc.)
+ * - Amount and date input
+ * - Franking credits with auto-calculated max for dividends
+ * - Tax withheld tracking
+ * - Taxable/non-taxable toggle
+ * - Optional notes
+ * - Mobile-optimized form layout
+ *
+ * @mobile Full-width dialog with stacked form fields, touch-friendly inputs
+ */
 'use client';
 
 import { useState } from 'react';
@@ -9,6 +25,7 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
+  DialogBody,
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -26,12 +43,26 @@ import { addIncome } from '@/lib/income/actions';
 import type { IncomeType, PersonType } from '@/lib/types';
 import { INCOME_TYPE_LABELS } from '@/lib/types';
 
+/** Props interface for IncomeDialog component */
 interface IncomeDialogProps {
+  /** Person to add income for */
   person: PersonType;
+  /** Whether dialog is open */
   open: boolean;
+  /** Callback to control dialog open state */
   onOpenChange: (open: boolean) => void;
 }
 
+/**
+ * Income Dialog Component
+ *
+ * Provides a comprehensive form for recording income entries
+ * with support for various income types, franking credits,
+ * and tax withheld tracking.
+ *
+ * @param props - Component props
+ * @returns Rendered income dialog
+ */
 export function IncomeDialog({ person, open, onOpenChange }: IncomeDialogProps) {
   const router = useRouter();
   const [isLoading, setIsLoading] = useState(false);
@@ -46,10 +77,16 @@ export function IncomeDialog({ person, open, onOpenChange }: IncomeDialogProps) 
   const [isTaxable, setIsTaxable] = useState(true);
   const [notes, setNotes] = useState('');
 
-  // Auto-calculate max franking credits for dividends
-  const maxFranking =
-    incomeType === 'dividend' && amount ? Number(amount) * (30 / 70) : 0;
+  /**
+   * Calculate maximum franking credits for fully-franked dividends
+   * Formula: Dividend amount * (30/70) for 30% corporate tax rate
+   */
+  const maxFranking = incomeType === 'dividend' && amount ? Number(amount) * (30 / 70) : 0;
 
+  /**
+   * Handles form submission
+   * @param e - Form event
+   */
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
@@ -75,13 +112,14 @@ export function IncomeDialog({ person, open, onOpenChange }: IncomeDialogProps) 
       } else {
         setError(result.error || 'Failed to add income');
       }
-    } catch (err) {
+    } catch {
       setError('An unexpected error occurred');
     } finally {
       setIsLoading(false);
     }
   };
 
+  /** Resets form to initial state */
   const resetForm = () => {
     setSource('');
     setIncomeType('salary');
@@ -99,137 +137,166 @@ export function IncomeDialog({ person, open, onOpenChange }: IncomeDialogProps) 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-[500px]">
-        <DialogHeader>
-          <DialogTitle>Add Income for {personName}</DialogTitle>
-          <DialogDescription>
-            Record salary, dividends, trust distributions, or other taxable income.
-          </DialogDescription>
-        </DialogHeader>
+        <form onSubmit={handleSubmit} className="flex h-full flex-col">
+          <DialogHeader>
+            <DialogTitle className="text-base sm:text-lg">Add Income for {personName}</DialogTitle>
+            <DialogDescription className="text-xs sm:text-sm">
+              Record salary, dividends, trust distributions, or other taxable income.
+            </DialogDescription>
+          </DialogHeader>
 
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div className="grid gap-4 md:grid-cols-2">
-            <div className="space-y-2">
-              <Label htmlFor="incomeType">Income Type</Label>
-              <Select
-                value={incomeType}
-                onValueChange={(value) => setIncomeType(value as IncomeType)}
-              >
-                <SelectTrigger id="incomeType">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {Object.entries(INCOME_TYPE_LABELS).map(([value, label]) => (
-                    <SelectItem key={value} value={value}>
-                      {label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+          <DialogBody className="space-y-4">
+            {/* Income Type & Date */}
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 sm:gap-4">
+              <div className="space-y-1.5">
+                <Label htmlFor="incomeType" className="text-xs sm:text-sm">
+                  Income Type
+                </Label>
+                <Select
+                  value={incomeType}
+                  onValueChange={(value) => setIncomeType(value as IncomeType)}
+                >
+                  <SelectTrigger id="incomeType" className="h-10 text-sm sm:h-9">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {Object.entries(INCOME_TYPE_LABELS).map(([value, label]) => (
+                      <SelectItem key={value} value={value}>
+                        {label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-1.5">
+                <Label htmlFor="date" className="text-xs sm:text-sm">
+                  Date Received
+                </Label>
+                <Input
+                  id="date"
+                  type="date"
+                  value={date}
+                  onChange={(e) => setDate(e.target.value)}
+                  required
+                  className="h-10 text-sm sm:h-9"
+                />
+              </div>
             </div>
 
-            <div className="space-y-2">
-              <Label htmlFor="date">Date Received</Label>
-              <Input
-                id="date"
-                type="date"
-                value={date}
-                onChange={(e) => setDate(e.target.value)}
-                required
-              />
-            </div>
-          </div>
-
-          <div className="space-y-2">
-            <Label htmlFor="source">Source</Label>
-            <Input
-              id="source"
-              placeholder="e.g., Employer Name, CBA Dividend, Trust Distribution"
-              value={source}
-              onChange={(e) => setSource(e.target.value)}
-              required
-            />
-          </div>
-
-          <div className="grid gap-4 md:grid-cols-3">
-            <div className="space-y-2">
-              <Label htmlFor="amount">Amount ($)</Label>
-              <Input
-                id="amount"
-                type="number"
-                step="0.01"
-                min="0"
-                placeholder="0.00"
-                value={amount}
-                onChange={(e) => setAmount(e.target.value)}
-                required
-              />
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="frankingCredits">
-                Franking ($)
-                {incomeType === 'dividend' && maxFranking > 0 && (
-                  <span className="ml-1 text-xs text-muted-foreground">
-                    (max ${maxFranking.toFixed(0)})
-                  </span>
-                )}
+            {/* Source */}
+            <div className="space-y-1.5">
+              <Label htmlFor="source" className="text-xs sm:text-sm">
+                Source
               </Label>
               <Input
-                id="frankingCredits"
-                type="number"
-                step="0.01"
-                min="0"
-                max={maxFranking || undefined}
-                placeholder="0.00"
-                value={frankingCredits}
-                onChange={(e) => setFrankingCredits(e.target.value)}
-                disabled={incomeType !== 'dividend' && incomeType !== 'trust_distribution'}
+                id="source"
+                placeholder="e.g., Employer Name, CBA Dividend, Trust Distribution"
+                value={source}
+                onChange={(e) => setSource(e.target.value)}
+                required
+                className="h-10 text-sm sm:h-9"
               />
             </div>
 
-            <div className="space-y-2">
-              <Label htmlFor="taxWithheld">Tax Withheld ($)</Label>
-              <Input
-                id="taxWithheld"
-                type="number"
-                step="0.01"
-                min="0"
-                placeholder="0.00"
-                value={taxWithheld}
-                onChange={(e) => setTaxWithheld(e.target.value)}
+            {/* Amount, Franking, Tax Withheld */}
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-3 sm:gap-4">
+              <div className="space-y-1.5">
+                <Label htmlFor="amount" className="text-xs sm:text-sm">
+                  Amount ($)
+                </Label>
+                <Input
+                  id="amount"
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  placeholder="0.00"
+                  value={amount}
+                  onChange={(e) => setAmount(e.target.value)}
+                  required
+                  className="h-10 text-sm sm:h-9"
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <Label htmlFor="frankingCredits" className="text-xs sm:text-sm">
+                  Franking ($)
+                  {incomeType === 'dividend' && maxFranking > 0 && (
+                    <span className="text-muted-foreground ml-1 text-[10px] sm:text-xs">
+                      (max ${maxFranking.toFixed(0)})
+                    </span>
+                  )}
+                </Label>
+                <Input
+                  id="frankingCredits"
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  max={maxFranking || undefined}
+                  placeholder="0.00"
+                  value={frankingCredits}
+                  onChange={(e) => setFrankingCredits(e.target.value)}
+                  disabled={incomeType !== 'dividend' && incomeType !== 'trust_distribution'}
+                  className="h-10 text-sm sm:h-9"
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <Label htmlFor="taxWithheld" className="text-xs sm:text-sm">
+                  Tax Withheld ($)
+                </Label>
+                <Input
+                  id="taxWithheld"
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  placeholder="0.00"
+                  value={taxWithheld}
+                  onChange={(e) => setTaxWithheld(e.target.value)}
+                  className="h-10 text-sm sm:h-9"
+                />
+              </div>
+            </div>
+
+            {/* Taxable Toggle */}
+            <div className="flex items-center justify-between py-1">
+              <div className="flex items-center space-x-2">
+                <Switch id="isTaxable" checked={isTaxable} onCheckedChange={setIsTaxable} />
+                <Label htmlFor="isTaxable" className="text-xs sm:text-sm">
+                  Taxable income
+                </Label>
+              </div>
+            </div>
+
+            {/* Notes */}
+            <div className="space-y-1.5">
+              <Label htmlFor="notes" className="text-xs sm:text-sm">
+                Notes (optional)
+              </Label>
+              <Textarea
+                id="notes"
+                placeholder="Any additional details..."
+                value={notes}
+                onChange={(e) => setNotes(e.target.value)}
+                rows={2}
+                className="resize-none text-sm"
               />
             </div>
-          </div>
 
-          <div className="flex items-center justify-between">
-            <div className="flex items-center space-x-2">
-              <Switch
-                id="isTaxable"
-                checked={isTaxable}
-                onCheckedChange={setIsTaxable}
-              />
-              <Label htmlFor="isTaxable">Taxable income</Label>
-            </div>
-          </div>
-
-          <div className="space-y-2">
-            <Label htmlFor="notes">Notes (optional)</Label>
-            <Textarea
-              id="notes"
-              placeholder="Any additional details..."
-              value={notes}
-              onChange={(e) => setNotes(e.target.value)}
-              rows={2}
-            />
-          </div>
-
-          {error && <p className="text-sm text-destructive">{error}</p>}
+            {/* Error Display */}
+            {error && <p className="text-destructive text-xs sm:text-sm">{error}</p>}
+          </DialogBody>
 
           <DialogFooter>
-            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => onOpenChange(false)}
+              className="min-h-11 sm:min-h-10"
+            >
               Cancel
             </Button>
-            <Button type="submit" disabled={isLoading}>
+            <Button type="submit" disabled={isLoading} className="min-h-11 sm:min-h-10">
               {isLoading ? 'Adding...' : 'Add Income'}
             </Button>
           </DialogFooter>

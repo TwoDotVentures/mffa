@@ -1,9 +1,21 @@
+/**
+ * @fileoverview SMSF Page - Self-Managed Super Fund Management
+ * @description Server component that handles SMSF data fetching and renders
+ * the comprehensive fund management interface with members, investments, and compliance.
+ *
+ * @features
+ * - Fund overview with total value
+ * - Member contribution tracking with cap monitoring
+ * - Investment register with asset allocation
+ * - Compliance checklist for regulatory requirements
+ *
+ * @mobile Full responsive design optimized for iPhone 17 Pro
+ */
 import { PageHeader } from '@/components/page-header';
 import { SmsfDashboard } from '@/components/smsf/smsf-dashboard';
 import { EmptySmsfState } from '@/components/smsf/empty-smsf-state';
 import {
   getSmsfFunds,
-  getSmsfMembers,
   getSmsfInvestments,
   getSmsfDashboard,
   getMemberContributionSummary,
@@ -11,6 +23,14 @@ import {
 } from '@/lib/smsf/actions';
 import { getFinancialYear } from '@/lib/smsf/utils';
 
+/**
+ * SMSF Page - Server Component
+ *
+ * Fetches and displays all SMSF-related data for the user's fund.
+ * Shows empty state if no fund is configured.
+ *
+ * @returns Rendered SMSF management interface
+ */
 export default async function SmsfPage() {
   // Get user's SMSF funds
   let funds: SmsfFund[] = [];
@@ -26,7 +46,7 @@ export default async function SmsfPage() {
     return (
       <>
         <PageHeader title="SMSF" description="Self-Managed Super Fund management" />
-        <main className="flex-1 p-4 md:p-6">
+        <main className="flex-1 p-3 sm:p-4 md:p-6">
           <EmptySmsfState />
         </main>
       </>
@@ -55,14 +75,13 @@ export default async function SmsfPage() {
     ...dashboardData,
     investments: {
       ...dashboardData.investments,
-      // The InvestmentRegister needs the raw investments array
     },
   };
 
   return (
     <>
       <PageHeader title="SMSF" description="G & S Super Fund management" />
-      <main className="flex-1 p-4 md:p-6">
+      <main className="flex-1 p-3 sm:p-4 md:p-6">
         <SmsfDashboard
           data={fullDashboardData}
           contributionSummaries={contributionSummaries}

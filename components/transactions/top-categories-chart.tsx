@@ -1,21 +1,44 @@
+/**
+ * TopCategoriesChart Component
+ *
+ * Horizontal bar chart showing top expense categories with expandable
+ * sub-categories. Clicking bars opens transaction details popup.
+ * Optimized for mobile with touch-friendly tap targets and gestures.
+ *
+ * @mobile Touch-friendly bars with 44px minimum height
+ * @desktop Compact bars with hover states
+ * @touch Large tap targets for category and subcategory rows
+ */
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useMemo, useState, useCallback } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { PieChart, ChevronDown, ChevronRight } from 'lucide-react';
+import { PieChart, ChevronDown, ChevronRight, Loader2 } from 'lucide-react';
 import { TransactionsPopup } from './transactions-popup';
-import type { Transaction } from '@/lib/types';
+import type { Transaction, PaginatedTransactionOptions } from '@/lib/types';
+import type { CategorySummary } from '@/lib/transactions/actions';
+import { getTransactionsForChartPopup } from '@/lib/transactions/actions';
 
+/** Props for TopCategoriesChart component */
 interface TopCategoriesChartProps {
-  transactions: Transaction[];
+  /** Transactions to analyze (used if summaryData not provided) */
+  transactions?: Transaction[];
+  /** Pre-computed summary data from server (takes precedence over transactions) */
+  summaryData?: CategorySummary[];
+  /** Whether data is currently loading */
+  loading?: boolean;
+  /** Current filter options (for on-demand popup fetching) */
+  filterOptions?: PaginatedTransactionOptions;
 }
 
+/** Sub-category data structure */
 interface SubCategory {
   name: string;
   fullName: string;
   amount: number;
 }
 
+/** Category group data structure */
 interface CategoryGroup {
   name: string;
   amount: number;
@@ -23,6 +46,9 @@ interface CategoryGroup {
   hasSubCategories: boolean;
 }
 
+/**
+ * Formats a number as Australian currency
+ */
 function formatCurrency(amount: number): string {
   return new Intl.NumberFormat('en-AU', {
     style: 'currency',
@@ -30,6 +56,7 @@ function formatCurrency(amount: number): string {
   }).format(amount);
 }
 
+/** Color palette for main category bars */
 const COLORS = [
   'bg-blue-500',
   'bg-green-500',
@@ -41,6 +68,7 @@ const COLORS = [
   'bg-teal-500',
 ];
 
+/** Color palette for sub-category bars */
 const SUB_COLORS = [
   'bg-blue-300',
   'bg-green-300',
@@ -52,20 +80,78 @@ const SUB_COLORS = [
   'bg-teal-300',
 ];
 
-export function TopCategoriesChart({ transactions }: TopCategoriesChartProps) {
+/**
+ * Chart displaying top expense categories with expandable sub-categories
+ */
+export function TopCategoriesChart({ transactions = [], summaryData, loading = false, filterOptions }: TopCategoriesChartProps) {
   const [expandedCategories, setExpandedCategories] = useState<Set<string>>(new Set());
   const [popupOpen, setPopupOpen] = useState(false);
   const [popupTitle, setPopupTitle] = useState('');
   const [popupTransactions, setPopupTransactions] = useState<Transaction[]>([]);
+  const [popupLoading, setPopupLoading] = useState(false);
 
-  // Filter expense transactions (excluding transfers)
+  // Filter expense transactions (excluding transfers) - only used if no summaryData
   const expenseTransactions = useMemo(() => {
+    if (summaryData) return []; // Not needed when using summary data
     return transactions.filter(
       (t) => t.transaction_type === 'expense' && t.category?.category_type !== 'transfer'
     );
-  }, [transactions]);
+  }, [transactions, summaryData]);
 
+  // Use server-side data when summaryData is provided
+  const useServerData = !!summaryData;
+
+  // Calculate category totals and group by parent
   const categoryData = useMemo(() => {
+    // If we have pre-computed summary data, use it directly
+    if (summaryData && summaryData.length > 0) {
+      const grouped: Record<string, CategoryGroup> = {};
+
+      for (const cat of summaryData) {
+        const fullName = cat.name;
+        const colonIndex = fullName.indexOf(':');
+
+        if (colonIndex > 0) {
+          const parentName = fullName.substring(0, colonIndex).trim();
+          const childName = fullName.substring(colonIndex + 1).trim();
+
+          if (!grouped[parentName]) {
+            grouped[parentName] = {
+              name: parentName,
+              amount: 0,
+              subCategories: [],
+              hasSubCategories: true,
+            };
+          }
+          grouped[parentName].amount += cat.amount;
+          grouped[parentName].subCategories.push({
+            name: childName,
+            fullName: fullName,
+            amount: cat.amount,
+          });
+        } else {
+          if (!grouped[fullName]) {
+            grouped[fullName] = {
+              name: fullName,
+              amount: cat.amount,
+              subCategories: [],
+              hasSubCategories: false,
+            };
+          } else {
+            grouped[fullName].amount += cat.amount;
+          }
+        }
+      }
+
+      // Sort sub-categories by amount
+      for (const group of Object.values(grouped)) {
+        group.subCategories.sort((a, b) => b.amount - a.amount);
+      }
+
+      return Object.values(grouped).sort((a, b) => b.amount - a.amount);
+    }
+
+    // Fall back to computing from transactions
     // First, collect all categories with their amounts
     const rawTotals: Record<string, number> = {};
 
@@ -124,6 +210,9 @@ export function TopCategoriesChart({ transactions }: TopCategoriesChartProps) {
   const maxAmount = categoryData.length > 0 ? categoryData[0].amount : 0;
   const totalExpenses = categoryData.reduce((sum, c) => sum + c.amount, 0);
 
+  /**
+   * Toggles expansion state for a category
+   */
   const toggleExpanded = (e: React.MouseEvent, categoryName: string) => {
     e.stopPropagation();
     setExpandedCategories((prev) => {
@@ -137,40 +226,104 @@ export function TopCategoriesChart({ transactions }: TopCategoriesChartProps) {
     });
   };
 
-  const handleCategoryClick = (category: CategoryGroup) => {
-    // Get transactions for this category (including all sub-categories if it's a parent)
-    let filtered: Transaction[];
-
-    if (category.hasSubCategories) {
-      // Match any category that starts with "ParentName:"
-      const prefix = category.name + ':';
-      filtered = expenseTransactions.filter(
-        (t) => t.category?.name?.startsWith(prefix)
-      );
-    } else {
-      // Match exact category name
-      filtered = expenseTransactions.filter(
-        (t) => (t.category?.name || 'Uncategorised') === category.name
-      );
-    }
-
+  /**
+   * Opens popup with transactions for a category
+   * Uses on-demand server fetch when summaryData is used for efficiency
+   */
+  const handleCategoryClick = useCallback(async (category: CategoryGroup) => {
     setPopupTitle(category.name);
-    setPopupTransactions(filtered.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()));
     setPopupOpen(true);
-  };
 
-  const handleSubCategoryClick = (e: React.MouseEvent, subCategory: SubCategory) => {
+    if (useServerData) {
+      // Fetch transactions on-demand from server
+      setPopupLoading(true);
+      setPopupTransactions([]);
+      try {
+        const data = await getTransactionsForChartPopup('category', category.name, filterOptions || {});
+        setPopupTransactions(data);
+      } catch (error) {
+        console.error('Error fetching category transactions:', error);
+      } finally {
+        setPopupLoading(false);
+      }
+    } else {
+      // Use local filtering for legacy mode
+      let filtered: Transaction[];
+      if (category.hasSubCategories) {
+        const prefix = category.name + ':';
+        filtered = expenseTransactions.filter(
+          (t) => t.category?.name?.startsWith(prefix)
+        );
+      } else {
+        filtered = expenseTransactions.filter(
+          (t) => (t.category?.name || 'Uncategorised') === category.name
+        );
+      }
+      setPopupTransactions(filtered.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()));
+    }
+  }, [useServerData, filterOptions, expenseTransactions]);
+
+  /**
+   * Opens popup with transactions for a sub-category
+   * Uses on-demand server fetch when summaryData is used for efficiency
+   */
+  const handleSubCategoryClick = useCallback(async (e: React.MouseEvent, subCategory: SubCategory) => {
     e.stopPropagation();
-
-    const filtered = expenseTransactions.filter(
-      (t) => t.category?.name === subCategory.fullName
-    );
-
     setPopupTitle(subCategory.fullName);
-    setPopupTransactions(filtered.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()));
     setPopupOpen(true);
-  };
 
+    if (useServerData) {
+      // Fetch transactions on-demand from server (use full name for exact match)
+      setPopupLoading(true);
+      setPopupTransactions([]);
+      try {
+        const data = await getTransactionsForChartPopup('category', subCategory.fullName, filterOptions || {});
+        setPopupTransactions(data);
+      } catch (error) {
+        console.error('Error fetching subcategory transactions:', error);
+      } finally {
+        setPopupLoading(false);
+      }
+    } else {
+      // Use local filtering for legacy mode
+      const filtered = expenseTransactions.filter(
+        (t) => t.category?.name === subCategory.fullName
+      );
+      setPopupTransactions(filtered.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()));
+    }
+  }, [useServerData, filterOptions, expenseTransactions]);
+
+  // Loading state with animated skeleton
+  if (loading) {
+    return (
+      <Card>
+        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+          <CardTitle className="text-sm font-medium">Top Categories</CardTitle>
+          <Loader2 className="h-4 w-4 text-muted-foreground animate-spin" />
+        </CardHeader>
+        <CardContent>
+          <div className="space-y-3">
+            {[80, 65, 50, 40, 30].map((width, i) => (
+              <div key={i} className="space-y-1.5 animate-pulse">
+                <div className="flex items-center justify-between">
+                  <div className="h-4 w-24 bg-muted rounded" />
+                  <div className="h-4 w-16 bg-muted rounded" />
+                </div>
+                <div className="h-2.5 w-full bg-muted rounded-full">
+                  <div
+                    className="h-2.5 bg-muted-foreground/20 rounded-full"
+                    style={{ width: `${width}%` }}
+                  />
+                </div>
+              </div>
+            ))}
+          </div>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  // Empty state
   if (categoryData.length === 0) {
     return (
       <Card>
@@ -204,43 +357,49 @@ export function TopCategoriesChart({ transactions }: TopCategoriesChartProps) {
 
               return (
                 <div key={category.name} className="space-y-1">
-                  {/* Main category row */}
+                  {/*
+                    Main category row
+                    - Touch-friendly minimum height (44px via py-2)
+                    - Active state feedback for mobile
+                  */}
                   <div
-                    className="flex items-center justify-between text-sm cursor-pointer hover:bg-muted/50 -mx-2 px-2 py-1 rounded transition-colors"
+                    className="flex items-center justify-between text-sm cursor-pointer hover:bg-muted/50 active:bg-muted -mx-2 px-2 py-2 rounded-lg transition-colors"
                     onClick={() => handleCategoryClick(category)}
                   >
-                    <div className="flex items-center gap-1">
+                    <div className="flex items-center gap-1.5 min-w-0 flex-1">
+                      <span className="truncate font-medium">{category.name}</span>
                       {category.hasSubCategories && (
                         <button
                           onClick={(e) => toggleExpanded(e, category.name)}
-                          className="p-0.5 hover:bg-muted rounded"
+                          className="p-1 hover:bg-muted rounded-md transition-colors flex-shrink-0"
+                          aria-label={isExpanded ? 'Collapse' : 'Expand'}
                         >
                           {isExpanded
-                            ? <ChevronDown className="h-3 w-3 text-muted-foreground" />
-                            : <ChevronRight className="h-3 w-3 text-muted-foreground" />
+                            ? <ChevronDown className="h-4 w-4 text-muted-foreground" />
+                            : <ChevronRight className="h-4 w-4 text-muted-foreground" />
                           }
                         </button>
                       )}
-                      <span className="truncate font-medium">{category.name}</span>
-                      {category.hasSubCategories && (
-                        <span className="text-xs text-muted-foreground ml-1">
-                          ({category.subCategories.length})
-                        </span>
-                      )}
                     </div>
-                    <span className="text-muted-foreground">
+                    <span className="text-muted-foreground text-right flex-shrink-0 ml-2">
                       {formatCurrency(category.amount)}
                       <span className="ml-1 text-xs">({totalPercentage.toFixed(0)}%)</span>
                     </span>
                   </div>
-                  <div className="h-2 w-full rounded-full bg-muted">
+
+                  {/* Progress bar */}
+                  <div className="h-2.5 md:h-2 w-full rounded-full bg-muted">
                     <div
-                      className={`h-2 rounded-full ${COLORS[index % COLORS.length]}`}
+                      className={`h-2.5 md:h-2 rounded-full transition-all duration-300 ${COLORS[index % COLORS.length]}`}
                       style={{ width: `${percentage}%` }}
                     />
                   </div>
 
-                  {/* Sub-categories (expanded) */}
+                  {/*
+                    Sub-categories (expanded)
+                    - Indented with border indicator
+                    - Same touch-friendly sizing
+                  */}
                   {category.hasSubCategories && isExpanded && (
                     <div className="ml-4 mt-2 space-y-2 border-l-2 border-muted pl-3">
                       {category.subCategories.map((sub, subIndex) => {
@@ -254,19 +413,19 @@ export function TopCategoriesChart({ transactions }: TopCategoriesChartProps) {
                         return (
                           <div
                             key={sub.name}
-                            className="space-y-1 cursor-pointer hover:bg-muted/50 -mx-2 px-2 py-1 rounded transition-colors"
+                            className="space-y-1 cursor-pointer hover:bg-muted/50 active:bg-muted -mx-2 px-2 py-1.5 rounded-lg transition-colors"
                             onClick={(e) => handleSubCategoryClick(e, sub)}
                           >
                             <div className="flex items-center justify-between text-xs">
                               <span className="truncate text-muted-foreground">{sub.name}</span>
-                              <span className="text-muted-foreground">
+                              <span className="text-muted-foreground ml-2 flex-shrink-0">
                                 {formatCurrency(sub.amount)}
                                 <span className="ml-1">({subTotalPercentage.toFixed(0)}%)</span>
                               </span>
                             </div>
-                            <div className="h-1.5 w-full rounded-full bg-muted">
+                            <div className="h-2 md:h-1.5 w-full rounded-full bg-muted">
                               <div
-                                className={`h-1.5 rounded-full ${SUB_COLORS[subIndex % SUB_COLORS.length]}`}
+                                className={`h-2 md:h-1.5 rounded-full transition-all duration-300 ${SUB_COLORS[subIndex % SUB_COLORS.length]}`}
                                 style={{ width: `${subPercentage}%` }}
                               />
                             </div>
@@ -287,6 +446,7 @@ export function TopCategoriesChart({ transactions }: TopCategoriesChartProps) {
         onOpenChange={setPopupOpen}
         title={popupTitle}
         transactions={popupTransactions}
+        loading={popupLoading}
       />
     </>
   );

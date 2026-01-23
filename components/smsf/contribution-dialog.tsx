@@ -1,3 +1,18 @@
+/**
+ * @fileoverview SMSF Contribution Dialog Component
+ * @description Modal dialog for recording super contributions with
+ * member selection, contribution type, and cap information.
+ *
+ * @features
+ * - Member selection dropdown
+ * - Contribution type selection with cap descriptions
+ * - Amount and date input
+ * - Optional description field
+ * - Mobile-optimized form layout with touch-friendly inputs
+ * - Loading state during submission
+ *
+ * @mobile Full-width dialog with stacked form fields
+ */
 'use client';
 
 import { useState } from 'react';
@@ -25,12 +40,17 @@ import { Plus, Loader2 } from 'lucide-react';
 import { createSmsfContribution, type SmsfMember, type SmsfContributionFormData } from '@/lib/smsf/actions';
 import { useRouter } from 'next/navigation';
 
+/** Props interface for ContributionDialog component */
 interface ContributionDialogProps {
+  /** SMSF fund ID */
   fundId: string;
+  /** Array of fund members */
   members: SmsfMember[];
+  /** Custom trigger element (optional) */
   trigger?: React.ReactNode;
 }
 
+/** Contribution type options with descriptions */
 const CONTRIBUTION_TYPES = [
   { value: 'concessional', label: 'Concessional (Before-Tax)', description: '$30,000 cap' },
   { value: 'non_concessional', label: 'Non-Concessional (After-Tax)', description: '$120,000 cap' },
@@ -39,6 +59,15 @@ const CONTRIBUTION_TYPES = [
   { value: 'downsizer', label: 'Downsizer Contribution', description: 'Up to $300,000 each' },
 ];
 
+/**
+ * Contribution Dialog Component
+ *
+ * Provides a form for recording super contributions with
+ * member selection and contribution type.
+ *
+ * @param props - Component props
+ * @returns Rendered contribution dialog
+ */
 export function ContributionDialog({ fundId, members, trigger }: ContributionDialogProps) {
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -54,6 +83,11 @@ export function ContributionDialog({ fundId, members, trigger }: ContributionDia
     description: '',
   });
 
+  /**
+   * Handles form submission
+   *
+   * @param e - Form event
+   */
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
@@ -81,29 +115,30 @@ export function ContributionDialog({ fundId, members, trigger }: ContributionDia
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
         {trigger || (
-          <Button>
-            <Plus className="mr-2 h-4 w-4" />
+          <Button className="h-9 sm:h-8 text-xs sm:text-sm">
+            <Plus className="mr-1.5 h-4 w-4" />
             Record Contribution
           </Button>
         )}
       </DialogTrigger>
-      <DialogContent className="sm:max-w-[425px]">
+      <DialogContent className="sm:max-w-[425px] max-h-[90vh] overflow-y-auto">
         <form onSubmit={handleSubmit}>
           <DialogHeader>
-            <DialogTitle>Record Contribution</DialogTitle>
-            <DialogDescription>
+            <DialogTitle className="text-base sm:text-lg">Record Contribution</DialogTitle>
+            <DialogDescription className="text-xs sm:text-sm">
               Record a super contribution for a fund member.
             </DialogDescription>
           </DialogHeader>
 
           <div className="grid gap-4 py-4">
-            <div className="grid gap-2">
-              <Label htmlFor="member">Member *</Label>
+            {/* Member Selection */}
+            <div className="space-y-1.5">
+              <Label htmlFor="member" className="text-xs sm:text-sm">Member *</Label>
               <Select
                 value={formData.member_id}
                 onValueChange={(value) => setFormData({ ...formData, member_id: value })}
               >
-                <SelectTrigger>
+                <SelectTrigger className="h-10 sm:h-9 text-sm">
                   <SelectValue placeholder="Select member" />
                 </SelectTrigger>
                 <SelectContent>
@@ -116,15 +151,16 @@ export function ContributionDialog({ fundId, members, trigger }: ContributionDia
               </Select>
             </div>
 
-            <div className="grid gap-2">
-              <Label htmlFor="contribution_type">Contribution Type *</Label>
+            {/* Contribution Type */}
+            <div className="space-y-1.5">
+              <Label htmlFor="contribution_type" className="text-xs sm:text-sm">Contribution Type *</Label>
               <Select
                 value={formData.contribution_type}
                 onValueChange={(value: SmsfContributionFormData['contribution_type']) =>
                   setFormData({ ...formData, contribution_type: value })
                 }
               >
-                <SelectTrigger>
+                <SelectTrigger className="h-10 sm:h-9 text-sm">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -138,13 +174,14 @@ export function ContributionDialog({ fundId, members, trigger }: ContributionDia
                 </SelectContent>
               </Select>
               {selectedType && (
-                <p className="text-xs text-muted-foreground">{selectedType.description}</p>
+                <p className="text-[10px] sm:text-xs text-muted-foreground">{selectedType.description}</p>
               )}
             </div>
 
-            <div className="grid grid-cols-2 gap-4">
-              <div className="grid gap-2">
-                <Label htmlFor="amount">Amount *</Label>
+            {/* Amount & Date */}
+            <div className="grid gap-3 sm:gap-4 grid-cols-1 sm:grid-cols-2">
+              <div className="space-y-1.5">
+                <Label htmlFor="amount" className="text-xs sm:text-sm">Amount *</Label>
                 <Input
                   id="amount"
                   type="number"
@@ -154,39 +191,49 @@ export function ContributionDialog({ fundId, members, trigger }: ContributionDia
                   onChange={(e) => setFormData({ ...formData, amount: parseFloat(e.target.value) || 0 })}
                   placeholder="0.00"
                   required
+                  className="h-10 sm:h-9 text-sm"
                 />
               </div>
-              <div className="grid gap-2">
-                <Label htmlFor="date">Date *</Label>
+              <div className="space-y-1.5">
+                <Label htmlFor="date" className="text-xs sm:text-sm">Date *</Label>
                 <Input
                   id="date"
                   type="date"
                   value={formData.date}
                   onChange={(e) => setFormData({ ...formData, date: e.target.value })}
                   required
+                  className="h-10 sm:h-9 text-sm"
                 />
               </div>
             </div>
 
-            <div className="grid gap-2">
-              <Label htmlFor="description">Description</Label>
+            {/* Description */}
+            <div className="space-y-1.5">
+              <Label htmlFor="description" className="text-xs sm:text-sm">Description</Label>
               <Textarea
                 id="description"
                 value={formData.description}
                 onChange={(e) => setFormData({ ...formData, description: e.target.value })}
                 placeholder="Optional notes about this contribution"
                 rows={2}
+                className="text-sm resize-none"
               />
             </div>
 
-            {error && <p className="text-sm text-destructive">{error}</p>}
+            {/* Error Display */}
+            {error && <p className="text-xs sm:text-sm text-destructive">{error}</p>}
           </div>
 
-          <DialogFooter>
-            <Button type="button" variant="outline" onClick={() => setOpen(false)}>
+          <DialogFooter className="gap-2 sm:gap-0">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setOpen(false)}
+              className="h-10 sm:h-9 text-sm"
+            >
               Cancel
             </Button>
-            <Button type="submit" disabled={loading || !formData.member_id}>
+            <Button type="submit" disabled={loading || !formData.member_id} className="h-10 sm:h-9 text-sm">
               {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
               Record Contribution
             </Button>

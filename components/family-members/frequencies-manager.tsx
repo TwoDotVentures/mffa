@@ -1,3 +1,15 @@
+/**
+ * Frequencies Manager Component
+ *
+ * Manages payment frequency options for fees and activities.
+ * Mobile-first responsive design with:
+ * - Card-based mobile layout, table on desktop
+ * - Touch-friendly action buttons
+ * - Full-screen dialogs on mobile
+ * - Responsive grid layouts
+ *
+ * @module components/family-members/frequencies-manager
+ */
 'use client';
 
 import { useState, useEffect } from 'react';
@@ -56,6 +68,10 @@ import {
 import { createClient } from '@/lib/supabase/client';
 import type { Frequency, FrequencyFormData } from '@/lib/types';
 
+/**
+ * Frequencies Manager Component
+ * Admin interface for managing payment frequency options
+ */
 export function FrequenciesManager() {
   const router = useRouter();
   const [loading, setLoading] = useState(true);
@@ -75,10 +91,12 @@ export function FrequenciesManager() {
     },
   });
 
+  /** Load frequencies on mount */
   useEffect(() => {
     loadFrequencies();
   }, []);
 
+  /** Fetch frequencies from server */
   async function loadFrequencies() {
     try {
       setLoading(true);
@@ -91,6 +109,7 @@ export function FrequenciesManager() {
     }
   }
 
+  /** Open add dialog */
   function handleAdd() {
     setEditingFreq(null);
     form.reset({
@@ -102,6 +121,7 @@ export function FrequenciesManager() {
     setDialogOpen(true);
   }
 
+  /** Open edit dialog */
   function handleEdit(freq: Frequency) {
     setEditingFreq(freq);
     form.reset({
@@ -113,11 +133,13 @@ export function FrequenciesManager() {
     setDialogOpen(true);
   }
 
+  /** Show delete confirmation */
   function handleDeleteClick(freq: Frequency) {
     setDeletingFreq(freq);
     setDeleteDialogOpen(true);
   }
 
+  /** Handle form submission */
   async function onSubmit(data: FrequencyFormData) {
     setActionLoading(true);
     try {
@@ -139,6 +161,7 @@ export function FrequenciesManager() {
     }
   }
 
+  /** Execute delete */
   async function handleDelete() {
     if (!deletingFreq) return;
 
@@ -159,6 +182,7 @@ export function FrequenciesManager() {
   const systemFreqs = frequencies.filter((f) => f.is_system);
   const customFreqs = frequencies.filter((f) => !f.is_system);
 
+  /** Loading state */
   if (loading) {
     return (
       <Card>
@@ -172,28 +196,51 @@ export function FrequenciesManager() {
   return (
     <>
       <Card>
-        <CardHeader className="flex flex-row items-center justify-between">
+        {/* Header - Stack on mobile */}
+        <CardHeader className="flex flex-col gap-3 space-y-0 p-4 sm:flex-row sm:items-center sm:justify-between sm:p-6">
           <div>
-            <CardTitle className="flex items-center gap-2">
-              <Clock className="h-5 w-5" />
+            <CardTitle className="flex items-center gap-2 text-base sm:text-lg">
+              <Clock className="h-4 w-4 sm:h-5 sm:w-5" />
               Payment Frequencies
             </CardTitle>
-            <CardDescription>
+            <CardDescription className="text-xs sm:text-sm">
               Manage payment frequency options for fees and activities
             </CardDescription>
           </div>
-          <Button onClick={handleAdd}>
-            <Plus className="mr-2 h-4 w-4" />
+          <Button onClick={handleAdd} size="sm" className="w-full sm:w-auto">
+            <Plus className="mr-1.5 h-4 w-4" />
             Add Frequency
           </Button>
         </CardHeader>
-        <CardContent className="space-y-6">
+        <CardContent className="space-y-4 p-4 pt-0 sm:space-y-6 sm:p-6 sm:pt-0">
           {/* System Frequencies */}
           <div>
-            <h4 className="text-sm font-medium text-muted-foreground mb-2">
+            <h4 className="mb-2 text-xs font-medium text-muted-foreground sm:text-sm">
               System Defaults (cannot be deleted)
             </h4>
-            <div className="rounded-md border">
+
+            {/* Mobile Card View */}
+            <div className="space-y-2 sm:hidden">
+              {systemFreqs.map((freq) => (
+                <div
+                  key={freq.id}
+                  className="flex items-center justify-between rounded-lg border p-3"
+                >
+                  <div className="flex items-center gap-2">
+                    <Lock className="h-3 w-3 text-muted-foreground" />
+                    <div>
+                      <p className="text-sm font-medium">{freq.name}</p>
+                      <p className="text-[10px] text-muted-foreground">
+                        {freq.per_year_multiplier ? `×${freq.per_year_multiplier}/year` : '-'}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {/* Desktop Table View */}
+            <div className="hidden overflow-hidden rounded-md border sm:block">
               <Table>
                 <TableHeader>
                   <TableRow>
@@ -226,183 +273,255 @@ export function FrequenciesManager() {
 
           {/* Custom Frequencies */}
           <div>
-            <h4 className="text-sm font-medium text-muted-foreground mb-2">
+            <h4 className="mb-2 text-xs font-medium text-muted-foreground sm:text-sm">
               Your Custom Frequencies
             </h4>
             {customFreqs.length === 0 ? (
-              <p className="text-sm text-muted-foreground">
+              <p className="py-4 text-center text-sm text-muted-foreground">
                 No custom frequencies yet. Click &quot;Add Frequency&quot; to create one.
               </p>
             ) : (
-              <div className="rounded-md border">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Name</TableHead>
-                      <TableHead>Description</TableHead>
-                      <TableHead>Per Year Multiplier</TableHead>
-                      <TableHead className="w-[80px]">Order</TableHead>
-                      <TableHead className="w-[50px]"></TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {customFreqs.map((freq) => (
-                      <TableRow key={freq.id}>
-                        <TableCell className="font-medium">{freq.name}</TableCell>
-                        <TableCell className="text-muted-foreground">
-                          {freq.description || '-'}
-                        </TableCell>
-                        <TableCell>
-                          {freq.per_year_multiplier ? `×${freq.per_year_multiplier}` : '-'}
-                        </TableCell>
-                        <TableCell>{freq.sort_order}</TableCell>
-                        <TableCell>
-                          <DropdownMenu>
-                            <DropdownMenuTrigger asChild>
-                              <Button variant="ghost" size="icon" className="h-8 w-8">
-                                <MoreHorizontal className="h-4 w-4" />
-                              </Button>
-                            </DropdownMenuTrigger>
-                            <DropdownMenuContent align="end">
-                              <DropdownMenuItem onClick={() => handleEdit(freq)}>
-                                <Pencil className="mr-2 h-4 w-4" />
-                                Edit
-                              </DropdownMenuItem>
-                              <DropdownMenuItem
-                                className="text-destructive"
-                                onClick={() => handleDeleteClick(freq)}
-                              >
-                                <Trash2 className="mr-2 h-4 w-4" />
-                                Delete
-                              </DropdownMenuItem>
-                            </DropdownMenuContent>
-                          </DropdownMenu>
-                        </TableCell>
+              <>
+                {/* Mobile Card View */}
+                <div className="space-y-2 sm:hidden">
+                  {customFreqs.map((freq) => (
+                    <div
+                      key={freq.id}
+                      className="flex items-center justify-between rounded-lg border p-3"
+                    >
+                      <div>
+                        <p className="text-sm font-medium">{freq.name}</p>
+                        <p className="text-[10px] text-muted-foreground">
+                          {freq.per_year_multiplier ? `×${freq.per_year_multiplier}/year` : '-'}
+                          {freq.description && ` • ${freq.description}`}
+                        </p>
+                      </div>
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0">
+                            <MoreHorizontal className="h-4 w-4" />
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end" className="min-w-[120px]">
+                          <DropdownMenuItem onClick={() => handleEdit(freq)} className="gap-2 py-2.5">
+                            <Pencil className="h-4 w-4" />
+                            Edit
+                          </DropdownMenuItem>
+                          <DropdownMenuItem
+                            className="gap-2 py-2.5 text-destructive focus:text-destructive"
+                            onClick={() => handleDeleteClick(freq)}
+                          >
+                            <Trash2 className="h-4 w-4" />
+                            Delete
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    </div>
+                  ))}
+                </div>
+
+                {/* Desktop Table View */}
+                <div className="hidden overflow-hidden rounded-md border sm:block">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Name</TableHead>
+                        <TableHead>Description</TableHead>
+                        <TableHead>Per Year Multiplier</TableHead>
+                        <TableHead className="w-[80px]">Order</TableHead>
+                        <TableHead className="w-[50px]"></TableHead>
                       </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </div>
+                    </TableHeader>
+                    <TableBody>
+                      {customFreqs.map((freq) => (
+                        <TableRow key={freq.id}>
+                          <TableCell className="font-medium">{freq.name}</TableCell>
+                          <TableCell className="text-muted-foreground">
+                            {freq.description || '-'}
+                          </TableCell>
+                          <TableCell>
+                            {freq.per_year_multiplier ? `×${freq.per_year_multiplier}` : '-'}
+                          </TableCell>
+                          <TableCell>{freq.sort_order}</TableCell>
+                          <TableCell>
+                            <DropdownMenu>
+                              <DropdownMenuTrigger asChild>
+                                <Button variant="ghost" size="icon" className="h-8 w-8">
+                                  <MoreHorizontal className="h-4 w-4" />
+                                </Button>
+                              </DropdownMenuTrigger>
+                              <DropdownMenuContent align="end">
+                                <DropdownMenuItem onClick={() => handleEdit(freq)}>
+                                  <Pencil className="mr-2 h-4 w-4" />
+                                  Edit
+                                </DropdownMenuItem>
+                                <DropdownMenuItem
+                                  className="text-destructive"
+                                  onClick={() => handleDeleteClick(freq)}
+                                >
+                                  <Trash2 className="mr-2 h-4 w-4" />
+                                  Delete
+                                </DropdownMenuItem>
+                              </DropdownMenuContent>
+                            </DropdownMenu>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              </>
             )}
           </div>
         </CardContent>
       </Card>
 
-      {/* Add/Edit Dialog */}
+      {/* Add/Edit Dialog - Full screen on mobile */}
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>
+        <DialogContent className="flex max-h-[100dvh] flex-col gap-0 overflow-hidden p-0 sm:max-h-[90vh] sm:max-w-[450px]">
+          <DialogHeader className="border-b p-4 sm:p-6">
+            <DialogTitle className="text-lg">
               {editingFreq ? 'Edit Frequency' : 'Add Frequency'}
             </DialogTitle>
-            <DialogDescription>
+            <DialogDescription className="text-sm">
               {editingFreq
                 ? 'Update this custom payment frequency.'
                 : 'Create a new payment frequency option.'}
             </DialogDescription>
           </DialogHeader>
-          <Form {...form}>
-            <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
-              <FormField
-                control={form.control}
-                name="name"
-                rules={{ required: 'Name is required' }}
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Name</FormLabel>
-                    <FormControl>
-                      <Input placeholder="e.g., Bi-Monthly" {...field} />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-              <FormField
-                control={form.control}
-                name="description"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Description</FormLabel>
-                    <FormControl>
-                      <Input placeholder="e.g., Every two months" {...field} />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-              <FormField
-                control={form.control}
-                name="per_year_multiplier"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Per Year Multiplier</FormLabel>
-                    <FormControl>
-                      <Input
-                        type="number"
-                        step="0.01"
-                        placeholder="e.g., 6 for bi-monthly"
-                        {...field}
-                        onChange={(e) =>
-                          field.onChange(
-                            e.target.value ? parseFloat(e.target.value) : undefined
-                          )
-                        }
-                        value={field.value || ''}
-                      />
-                    </FormControl>
-                    <FormDescription>
-                      Used to calculate annual costs (e.g., 52 for weekly, 12 for monthly)
-                    </FormDescription>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-              <FormField
-                control={form.control}
-                name="sort_order"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Sort Order</FormLabel>
-                    <FormControl>
-                      <Input
-                        type="number"
-                        {...field}
-                        onChange={(e) => field.onChange(parseInt(e.target.value) || 0)}
-                      />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-              <DialogFooter>
-                <Button type="button" variant="outline" onClick={() => setDialogOpen(false)}>
-                  Cancel
-                </Button>
-                <Button type="submit" disabled={actionLoading}>
-                  {actionLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                  {editingFreq ? 'Save' : 'Add'}
-                </Button>
-              </DialogFooter>
-            </form>
-          </Form>
+          <div className="flex-1 overflow-y-auto p-4 sm:p-6">
+            <Form {...form}>
+              <form id="frequency-form" onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+                <FormField
+                  control={form.control}
+                  name="name"
+                  rules={{ required: 'Name is required' }}
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel className="text-xs sm:text-sm">Name</FormLabel>
+                      <FormControl>
+                        <Input
+                          placeholder="e.g., Bi-Monthly"
+                          className="h-11 text-base sm:h-10 sm:text-sm"
+                          {...field}
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={form.control}
+                  name="description"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel className="text-xs sm:text-sm">Description</FormLabel>
+                      <FormControl>
+                        <Input
+                          placeholder="e.g., Every two months"
+                          className="h-11 text-base sm:h-10 sm:text-sm"
+                          {...field}
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={form.control}
+                  name="per_year_multiplier"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel className="text-xs sm:text-sm">Per Year Multiplier</FormLabel>
+                      <FormControl>
+                        <Input
+                          type="number"
+                          step="0.01"
+                          placeholder="e.g., 6 for bi-monthly"
+                          className="h-11 text-base sm:h-10 sm:text-sm"
+                          {...field}
+                          onChange={(e) =>
+                            field.onChange(
+                              e.target.value ? parseFloat(e.target.value) : undefined
+                            )
+                          }
+                          value={field.value || ''}
+                        />
+                      </FormControl>
+                      <FormDescription className="text-[10px] sm:text-xs">
+                        Used to calculate annual costs (e.g., 52 for weekly, 12 for monthly)
+                      </FormDescription>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={form.control}
+                  name="sort_order"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel className="text-xs sm:text-sm">Sort Order</FormLabel>
+                      <FormControl>
+                        <Input
+                          type="number"
+                          className="h-11 text-base sm:h-10 sm:text-sm"
+                          {...field}
+                          onChange={(e) => field.onChange(parseInt(e.target.value) || 0)}
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </form>
+            </Form>
+          </div>
+          <DialogFooter className="flex-col-reverse gap-2 border-t p-4 sm:flex-row sm:gap-3 sm:p-6">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setDialogOpen(false)}
+              className="h-11 w-full sm:h-10 sm:w-auto"
+            >
+              Cancel
+            </Button>
+            <Button
+              type="submit"
+              form="frequency-form"
+              disabled={actionLoading}
+              className="h-11 w-full sm:h-10 sm:w-auto"
+            >
+              {actionLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              {editingFreq ? 'Save' : 'Add'}
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
 
       {/* Delete Confirmation Dialog */}
       <Dialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
-        <DialogContent>
+        <DialogContent className="mx-4 max-w-[calc(100vw-2rem)] rounded-lg sm:mx-auto sm:max-w-md">
           <DialogHeader>
-            <DialogTitle>Delete Frequency</DialogTitle>
-            <DialogDescription>
+            <DialogTitle className="text-lg">Delete Frequency</DialogTitle>
+            <DialogDescription className="text-sm">
               Are you sure you want to delete &quot;{deletingFreq?.name}&quot;?
               This may affect existing fees and activities using this frequency.
             </DialogDescription>
           </DialogHeader>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setDeleteDialogOpen(false)}>
+          <DialogFooter className="flex-col-reverse gap-2 sm:flex-row sm:gap-0">
+            <Button
+              variant="outline"
+              onClick={() => setDeleteDialogOpen(false)}
+              className="h-11 w-full sm:h-10 sm:w-auto"
+            >
               Cancel
             </Button>
-            <Button variant="destructive" onClick={handleDelete} disabled={actionLoading}>
+            <Button
+              variant="destructive"
+              onClick={handleDelete}
+              disabled={actionLoading}
+              className="h-11 w-full sm:h-10 sm:w-auto"
+            >
               {actionLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
               Delete
             </Button>

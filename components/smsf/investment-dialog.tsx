@@ -1,3 +1,19 @@
+/**
+ * @fileoverview SMSF Investment Dialog Component
+ * @description Modal dialog for adding or editing SMSF investments
+ * with asset type, valuation details, and performance tracking.
+ *
+ * @features
+ * - Asset type selection (shares, property, cash, etc.)
+ * - Investment name and description
+ * - Units/shares and acquisition date
+ * - Cost base and current value with gain/loss calculation
+ * - Income YTD tracking
+ * - Mobile-optimized form layout with touch-friendly inputs
+ * - Loading state during submission
+ *
+ * @mobile Full-width dialog with stacked form fields
+ */
 'use client';
 
 import { useState } from 'react';
@@ -25,12 +41,17 @@ import { Plus, Loader2, TrendingUp } from 'lucide-react';
 import { createSmsfInvestment, updateSmsfInvestment, type SmsfInvestment, type SmsfInvestmentFormData } from '@/lib/smsf/actions';
 import { useRouter } from 'next/navigation';
 
+/** Props interface for InvestmentDialog component */
 interface InvestmentDialogProps {
+  /** SMSF fund ID */
   fundId: string;
+  /** Existing investment for editing (optional) */
   investment?: SmsfInvestment;
+  /** Custom trigger element (optional) */
   trigger?: React.ReactNode;
 }
 
+/** Asset type options */
 const ASSET_TYPES = [
   { value: 'australian_shares', label: 'Australian Shares' },
   { value: 'international_shares', label: 'International Shares' },
@@ -42,6 +63,28 @@ const ASSET_TYPES = [
   { value: 'other', label: 'Other' },
 ];
 
+/**
+ * Formats a number as Australian currency
+ *
+ * @param amount - Number to format
+ * @returns Formatted currency string
+ */
+const formatCurrency = (amount: number): string =>
+  new Intl.NumberFormat('en-AU', {
+    style: 'currency',
+    currency: 'AUD',
+    minimumFractionDigits: 2,
+  }).format(amount);
+
+/**
+ * Investment Dialog Component
+ *
+ * Provides a form for adding or editing SMSF investments
+ * with asset details and valuation information.
+ *
+ * @param props - Component props
+ * @returns Rendered investment dialog
+ */
 export function InvestmentDialog({ fundId, investment, trigger }: InvestmentDialogProps) {
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -60,6 +103,11 @@ export function InvestmentDialog({ fundId, investment, trigger }: InvestmentDial
     income_ytd: investment?.income_ytd || 0,
   });
 
+  /**
+   * Handles form submission
+   *
+   * @param e - Form event
+   */
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
@@ -80,6 +128,7 @@ export function InvestmentDialog({ fundId, investment, trigger }: InvestmentDial
     }
   };
 
+  // Calculate unrealised gain/loss
   const gainLoss = formData.current_value - formData.cost_base;
   const gainLossPercent = formData.cost_base > 0 ? (gainLoss / formData.cost_base) * 100 : 0;
 
@@ -87,34 +136,35 @@ export function InvestmentDialog({ fundId, investment, trigger }: InvestmentDial
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
         {trigger || (
-          <Button>
-            <Plus className="mr-2 h-4 w-4" />
+          <Button className="h-9 sm:h-8 text-xs sm:text-sm">
+            <Plus className="mr-1.5 h-4 w-4" />
             Add Investment
           </Button>
         )}
       </DialogTrigger>
-      <DialogContent className="sm:max-w-[500px]">
+      <DialogContent className="sm:max-w-[500px] max-h-[90vh] overflow-y-auto">
         <form onSubmit={handleSubmit}>
           <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <TrendingUp className="h-5 w-5" />
+            <DialogTitle className="flex items-center gap-2 text-base sm:text-lg">
+              <TrendingUp className="h-4 w-4 sm:h-5 sm:w-5" />
               {investment ? 'Edit Investment' : 'Add Investment'}
             </DialogTitle>
-            <DialogDescription>
+            <DialogDescription className="text-xs sm:text-sm">
               {investment ? 'Update investment details.' : 'Add an investment to your SMSF portfolio.'}
             </DialogDescription>
           </DialogHeader>
 
           <div className="grid gap-4 py-4">
-            <div className="grid gap-2">
-              <Label htmlFor="asset_type">Asset Type *</Label>
+            {/* Asset Type */}
+            <div className="space-y-1.5">
+              <Label htmlFor="asset_type" className="text-xs sm:text-sm">Asset Type *</Label>
               <Select
                 value={formData.asset_type}
                 onValueChange={(value: SmsfInvestmentFormData['asset_type']) =>
                   setFormData({ ...formData, asset_type: value })
                 }
               >
-                <SelectTrigger>
+                <SelectTrigger className="h-10 sm:h-9 text-sm">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -127,31 +177,36 @@ export function InvestmentDialog({ fundId, investment, trigger }: InvestmentDial
               </Select>
             </div>
 
-            <div className="grid gap-2">
-              <Label htmlFor="name">Investment Name *</Label>
+            {/* Investment Name */}
+            <div className="space-y-1.5">
+              <Label htmlFor="name" className="text-xs sm:text-sm">Investment Name *</Label>
               <Input
                 id="name"
                 value={formData.name}
                 onChange={(e) => setFormData({ ...formData, name: e.target.value })}
                 placeholder="e.g., VAS - Vanguard Australian Shares ETF"
                 required
+                className="h-10 sm:h-9 text-sm"
               />
             </div>
 
-            <div className="grid gap-2">
-              <Label htmlFor="description">Description</Label>
+            {/* Description */}
+            <div className="space-y-1.5">
+              <Label htmlFor="description" className="text-xs sm:text-sm">Description</Label>
               <Textarea
                 id="description"
                 value={formData.description}
                 onChange={(e) => setFormData({ ...formData, description: e.target.value })}
                 placeholder="Optional notes about this investment"
                 rows={2}
+                className="text-sm resize-none"
               />
             </div>
 
-            <div className="grid grid-cols-2 gap-4">
-              <div className="grid gap-2">
-                <Label htmlFor="units">Units/Shares</Label>
+            {/* Units & Acquisition Date */}
+            <div className="grid gap-3 sm:gap-4 grid-cols-1 sm:grid-cols-2">
+              <div className="space-y-1.5">
+                <Label htmlFor="units" className="text-xs sm:text-sm">Units/Shares</Label>
                 <Input
                   id="units"
                   type="number"
@@ -161,22 +216,25 @@ export function InvestmentDialog({ fundId, investment, trigger }: InvestmentDial
                     setFormData({ ...formData, units: e.target.value ? parseFloat(e.target.value) : undefined })
                   }
                   placeholder="0"
+                  className="h-10 sm:h-9 text-sm"
                 />
               </div>
-              <div className="grid gap-2">
-                <Label htmlFor="acquisition_date">Acquisition Date</Label>
+              <div className="space-y-1.5">
+                <Label htmlFor="acquisition_date" className="text-xs sm:text-sm">Acquisition Date</Label>
                 <Input
                   id="acquisition_date"
                   type="date"
                   value={formData.acquisition_date}
                   onChange={(e) => setFormData({ ...formData, acquisition_date: e.target.value })}
+                  className="h-10 sm:h-9 text-sm"
                 />
               </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-4">
-              <div className="grid gap-2">
-                <Label htmlFor="cost_base">Cost Base *</Label>
+            {/* Cost Base & Current Value */}
+            <div className="grid gap-3 sm:gap-4 grid-cols-1 sm:grid-cols-2">
+              <div className="space-y-1.5">
+                <Label htmlFor="cost_base" className="text-xs sm:text-sm">Cost Base *</Label>
                 <Input
                   id="cost_base"
                   type="number"
@@ -186,10 +244,11 @@ export function InvestmentDialog({ fundId, investment, trigger }: InvestmentDial
                   onChange={(e) => setFormData({ ...formData, cost_base: parseFloat(e.target.value) || 0 })}
                   placeholder="0.00"
                   required
+                  className="h-10 sm:h-9 text-sm"
                 />
               </div>
-              <div className="grid gap-2">
-                <Label htmlFor="current_value">Current Value *</Label>
+              <div className="space-y-1.5">
+                <Label htmlFor="current_value" className="text-xs sm:text-sm">Current Value *</Label>
                 <Input
                   id="current_value"
                   type="number"
@@ -199,23 +258,26 @@ export function InvestmentDialog({ fundId, investment, trigger }: InvestmentDial
                   onChange={(e) => setFormData({ ...formData, current_value: parseFloat(e.target.value) || 0 })}
                   placeholder="0.00"
                   required
+                  className="h-10 sm:h-9 text-sm"
                 />
               </div>
             </div>
 
+            {/* Gain/Loss Preview */}
             {formData.cost_base > 0 && (
-              <div className="rounded-lg bg-muted p-3 text-sm">
+              <div className="rounded-lg bg-muted p-3 text-xs sm:text-sm">
                 <div className="flex justify-between">
                   <span>Unrealised Gain/Loss:</span>
-                  <span className={gainLoss >= 0 ? 'text-green-600 font-medium' : 'text-red-600 font-medium'}>
-                    {gainLoss >= 0 ? '+' : ''}${gainLoss.toFixed(2)} ({gainLossPercent >= 0 ? '+' : ''}{gainLossPercent.toFixed(1)}%)
+                  <span className={`font-medium tabular-nums ${gainLoss >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                    {gainLoss >= 0 ? '+' : ''}{formatCurrency(gainLoss)} ({gainLossPercent >= 0 ? '+' : ''}{gainLossPercent.toFixed(1)}%)
                   </span>
                 </div>
               </div>
             )}
 
-            <div className="grid gap-2">
-              <Label htmlFor="income_ytd">Income YTD</Label>
+            {/* Income YTD */}
+            <div className="space-y-1.5">
+              <Label htmlFor="income_ytd" className="text-xs sm:text-sm">Income YTD</Label>
               <Input
                 id="income_ytd"
                 type="number"
@@ -224,20 +286,27 @@ export function InvestmentDialog({ fundId, investment, trigger }: InvestmentDial
                 value={formData.income_ytd || ''}
                 onChange={(e) => setFormData({ ...formData, income_ytd: parseFloat(e.target.value) || 0 })}
                 placeholder="0.00"
+                className="h-10 sm:h-9 text-sm"
               />
-              <p className="text-xs text-muted-foreground">
+              <p className="text-[10px] sm:text-xs text-muted-foreground">
                 Dividends, distributions, and interest received this financial year
               </p>
             </div>
 
-            {error && <p className="text-sm text-destructive">{error}</p>}
+            {/* Error Display */}
+            {error && <p className="text-xs sm:text-sm text-destructive">{error}</p>}
           </div>
 
-          <DialogFooter>
-            <Button type="button" variant="outline" onClick={() => setOpen(false)}>
+          <DialogFooter className="gap-2 sm:gap-0">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setOpen(false)}
+              className="h-10 sm:h-9 text-sm"
+            >
               Cancel
             </Button>
-            <Button type="submit" disabled={loading}>
+            <Button type="submit" disabled={loading} className="h-10 sm:h-9 text-sm">
               {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
               {investment ? 'Save Changes' : 'Add Investment'}
             </Button>

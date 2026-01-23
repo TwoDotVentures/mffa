@@ -1,9 +1,21 @@
+/**
+ * Member Detail Client Component
+ *
+ * Client-side component for member detail page with tab content.
+ * Mobile-first responsive design with:
+ * - 2-column grid on mobile for overview cards
+ * - Stacked layout for detail sections
+ * - Touch-friendly spacing and elements
+ * - Compact info display on smaller screens
+ *
+ * @module components/family-members/member-detail-client
+ */
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import { TabsContent } from '@/components/ui/tabs';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { FamilyMemberDialog } from '@/components/family-members/family-member-dialog';
@@ -28,13 +40,22 @@ import {
   FileText,
   Loader2,
 } from 'lucide-react';
-import type { FamilyMember, SchoolEnrolment, Extracurricular, MemberDocument as MemberDocType } from '@/lib/types';
+import type {
+  FamilyMember,
+  SchoolEnrolment,
+  Extracurricular,
+  MemberDocument as MemberDocType,
+} from '@/lib/types';
 
 interface MemberDetailClientProps {
   member: FamilyMember;
   activeTab: string;
 }
 
+/**
+ * Member Detail Client Component
+ * Renders tab content for member detail page
+ */
 export function MemberDetailClient({ member, activeTab }: MemberDetailClientProps) {
   const router = useRouter();
   const [loading, setLoading] = useState(true);
@@ -45,11 +66,8 @@ export function MemberDetailClient({ member, activeTab }: MemberDetailClientProp
   const [activities, setActivities] = useState<Extracurricular[]>([]);
   const [documents, setDocuments] = useState<MemberDocType[]>([]);
 
-  useEffect(() => {
-    loadData();
-  }, [member.id]);
-
-  async function loadData() {
+  /** Memoize loadData with useCallback to fix dependency warning */
+  const loadData = useCallback(async () => {
     try {
       setLoading(true);
       const [enrolmentsData, activitiesData, documentsData] = await Promise.all([
@@ -65,20 +83,52 @@ export function MemberDetailClient({ member, activeTab }: MemberDetailClientProp
     } finally {
       setLoading(false);
     }
-  }
+  }, [member.id, member.member_type]);
 
-  const currentEnrolment = enrolments.find((e) => e.is_current);
-  const activeActivities = activities.filter((a) => a.is_active);
-  const totalActivityCost = activeActivities.reduce((sum, a) => {
-    const cost = a.cost_amount || 0;
-    const multiplier = a.cost_frequency?.per_year_multiplier || 1;
-    return sum + cost * multiplier;
-  }, 0);
+  /** Effect with proper dependency */
+  useEffect(() => {
+    loadData();
+  }, [loadData]);
 
+  /** Memoize derived values */
+  const currentEnrolment = useMemo(() => enrolments.find((e) => e.is_current), [enrolments]);
+
+  const activeActivities = useMemo(() => activities.filter((a) => a.is_active), [activities]);
+
+  const totalActivityCost = useMemo(
+    () =>
+      activeActivities.reduce((sum, a) => {
+        const cost = a.cost_amount || 0;
+        const multiplier = a.cost_frequency?.per_year_multiplier || 1;
+        return sum + cost * multiplier;
+      }, 0),
+    [activeActivities]
+  );
+
+  /** Memoize callback handlers */
+  const handleEditDialogChange = useCallback(
+    (open: boolean) => {
+      setEditDialogOpen(open);
+      if (!open) {
+        router.refresh();
+      }
+    },
+    [router]
+  );
+
+  const handleDocumentUploadSuccess = useCallback(() => {
+    setDocumentUploadOpen(false);
+    loadData();
+  }, [loadData]);
+
+  const handleOpenEditDialog = useCallback(() => setEditDialogOpen(true), []);
+  const handleOpenDocumentUpload = useCallback(() => setDocumentUploadOpen(true), []);
+
+  /** Loading state */
   if (loading) {
     return (
-      <div className="flex items-center justify-center py-12">
-        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+      <div className="flex items-center justify-center py-8 sm:py-12">
+        <Loader2 className="h-6 w-6 animate-spin text-muted-foreground sm:h-8 sm:w-8" />
       </div>
     );
   }
@@ -86,77 +136,86 @@ export function MemberDetailClient({ member, activeTab }: MemberDetailClientProp
   return (
     <>
       {/* Overview Tab */}
-      <TabsContent value="overview" className="space-y-4">
-        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+      <TabsContent value="overview" className="space-y-3 sm:space-y-4">
+        {/* Overview Cards - 2 col mobile, 3 col desktop */}
+        <div className="grid grid-cols-2 gap-2 sm:gap-3 md:gap-4 lg:grid-cols-3">
           {/* Personal Info Card */}
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between pb-2">
-              <CardTitle className="text-sm font-medium">Personal Information</CardTitle>
+          <Card className="col-span-2 overflow-hidden lg:col-span-1">
+            <CardHeader className="flex flex-row items-center justify-between p-3 pb-2 sm:p-4 sm:pb-2">
+              <CardTitle className="text-xs font-medium text-muted-foreground sm:text-sm">
+                Personal Information
+              </CardTitle>
               <Button
                 variant="ghost"
                 size="icon"
-                onClick={() => setEditDialogOpen(true)}
+                onClick={handleOpenEditDialog}
+                className="h-7 w-7 sm:h-8 sm:w-8"
               >
-                <Pencil className="h-4 w-4" />
+                <Pencil className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
               </Button>
             </CardHeader>
-            <CardContent className="space-y-3">
+            <CardContent className="space-y-2 p-3 pt-0 sm:space-y-3 sm:p-4 sm:pt-0">
               {member.date_of_birth && (
-                <div className="flex items-center gap-2 text-sm">
-                  <Calendar className="h-4 w-4 text-muted-foreground" />
+                <div className="flex items-center gap-1.5 text-xs sm:gap-2 sm:text-sm">
+                  <Calendar className="h-3.5 w-3.5 text-muted-foreground sm:h-4 sm:w-4" />
                   <span>
                     {new Date(member.date_of_birth).toLocaleDateString('en-AU', {
                       day: 'numeric',
-                      month: 'long',
+                      month: 'short',
                       year: 'numeric',
                     })}
                   </span>
                 </div>
               )}
               {member.email && (
-                <div className="flex items-center gap-2 text-sm">
-                  <Mail className="h-4 w-4 text-muted-foreground" />
-                  <a href={`mailto:${member.email}`} className="text-primary hover:underline">
+                <div className="flex items-center gap-1.5 text-xs sm:gap-2 sm:text-sm">
+                  <Mail className="h-3.5 w-3.5 shrink-0 text-muted-foreground sm:h-4 sm:w-4" />
+                  <a
+                    href={`mailto:${member.email}`}
+                    className="truncate text-primary hover:underline"
+                  >
                     {member.email}
                   </a>
                 </div>
               )}
               {member.phone && (
-                <div className="flex items-center gap-2 text-sm">
-                  <Phone className="h-4 w-4 text-muted-foreground" />
+                <div className="flex items-center gap-1.5 text-xs sm:gap-2 sm:text-sm">
+                  <Phone className="h-3.5 w-3.5 text-muted-foreground sm:h-4 sm:w-4" />
                   <a href={`tel:${member.phone}`} className="text-primary hover:underline">
                     {member.phone}
                   </a>
                 </div>
               )}
               {!member.date_of_birth && !member.email && !member.phone && (
-                <p className="text-sm text-muted-foreground">No contact information</p>
+                <p className="text-xs text-muted-foreground sm:text-sm">No contact information</p>
               )}
             </CardContent>
           </Card>
 
           {/* School Card (for children) */}
           {member.member_type === 'child' && (
-            <Card>
-              <CardHeader className="pb-2">
-                <CardTitle className="text-sm font-medium flex items-center gap-2">
-                  <GraduationCap className="h-4 w-4" />
+            <Card className="overflow-hidden">
+              <CardHeader className="p-3 pb-2 sm:p-4 sm:pb-2">
+                <CardTitle className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground sm:gap-2 sm:text-sm">
+                  <GraduationCap className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
                   Current School
                 </CardTitle>
               </CardHeader>
-              <CardContent>
+              <CardContent className="p-3 pt-0 sm:p-4 sm:pt-0">
                 {currentEnrolment ? (
-                  <div className="space-y-2">
-                    <p className="font-medium">{currentEnrolment.school?.name}</p>
-                    <p className="text-sm text-muted-foreground">
+                  <div className="space-y-1 sm:space-y-2">
+                    <p className="text-sm font-medium sm:text-base">
+                      {currentEnrolment.school?.name}
+                    </p>
+                    <p className="text-xs text-muted-foreground sm:text-sm">
                       Year {currentEnrolment.year_level}
                     </p>
-                    <Badge variant="outline">
+                    <Badge variant="outline" className="text-[10px] sm:text-xs">
                       {currentEnrolment.school?.school_type || 'School'}
                     </Badge>
                   </div>
                 ) : (
-                  <p className="text-sm text-muted-foreground">Not currently enrolled</p>
+                  <p className="text-xs text-muted-foreground sm:text-sm">Not currently enrolled</p>
                 )}
               </CardContent>
             </Card>
@@ -164,19 +223,17 @@ export function MemberDetailClient({ member, activeTab }: MemberDetailClientProp
 
           {/* Enrolments Card */}
           {member.member_type === 'child' && (
-            <Card>
-              <CardHeader className="pb-2">
-                <CardTitle className="text-sm font-medium flex items-center gap-2">
-                  <DollarSign className="h-4 w-4" />
+            <Card className="overflow-hidden">
+              <CardHeader className="p-3 pb-2 sm:p-4 sm:pb-2">
+                <CardTitle className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground sm:gap-2 sm:text-sm">
+                  <DollarSign className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
                   Enrolments
                 </CardTitle>
               </CardHeader>
-              <CardContent>
-                <div className="space-y-2">
-                  <div className="text-2xl font-bold">
-                    {enrolments.length}
-                  </div>
-                  <p className="text-sm text-muted-foreground">
+              <CardContent className="p-3 pt-0 sm:p-4 sm:pt-0">
+                <div className="space-y-0.5 sm:space-y-1">
+                  <div className="text-lg font-bold sm:text-2xl">{enrolments.length}</div>
+                  <p className="text-[10px] text-muted-foreground sm:text-xs">
                     School enrolment{enrolments.length !== 1 ? 's' : ''}
                   </p>
                 </div>
@@ -186,19 +243,17 @@ export function MemberDetailClient({ member, activeTab }: MemberDetailClientProp
 
           {/* Activities Summary Card */}
           {member.member_type === 'child' && (
-            <Card>
-              <CardHeader className="pb-2">
-                <CardTitle className="text-sm font-medium flex items-center gap-2">
-                  <Activity className="h-4 w-4" />
+            <Card className="overflow-hidden">
+              <CardHeader className="p-3 pb-2 sm:p-4 sm:pb-2">
+                <CardTitle className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground sm:gap-2 sm:text-sm">
+                  <Activity className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
                   Activities
                 </CardTitle>
               </CardHeader>
-              <CardContent>
-                <div className="space-y-2">
-                  <div className="text-2xl font-bold">
-                    {activeActivities.length}
-                  </div>
-                  <p className="text-sm text-muted-foreground">
+              <CardContent className="p-3 pt-0 sm:p-4 sm:pt-0">
+                <div className="space-y-0.5 sm:space-y-1">
+                  <div className="text-lg font-bold sm:text-2xl">{activeActivities.length}</div>
+                  <p className="text-[10px] text-muted-foreground sm:text-xs">
                     ${totalActivityCost.toLocaleString()}/year
                   </p>
                 </div>
@@ -207,17 +262,17 @@ export function MemberDetailClient({ member, activeTab }: MemberDetailClientProp
           )}
 
           {/* Documents Card */}
-          <Card>
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-medium flex items-center gap-2">
-                <FileText className="h-4 w-4" />
+          <Card className="overflow-hidden">
+            <CardHeader className="p-3 pb-2 sm:p-4 sm:pb-2">
+              <CardTitle className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground sm:gap-2 sm:text-sm">
+                <FileText className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
                 Documents
               </CardTitle>
             </CardHeader>
-            <CardContent>
-              <div className="space-y-2">
-                <div className="text-2xl font-bold">{documents.length}</div>
-                <p className="text-sm text-muted-foreground">Linked documents</p>
+            <CardContent className="p-3 pt-0 sm:p-4 sm:pt-0">
+              <div className="space-y-0.5 sm:space-y-1">
+                <div className="text-lg font-bold sm:text-2xl">{documents.length}</div>
+                <p className="text-[10px] text-muted-foreground sm:text-xs">Linked documents</p>
               </div>
             </CardContent>
           </Card>
@@ -225,12 +280,14 @@ export function MemberDetailClient({ member, activeTab }: MemberDetailClientProp
 
         {/* Notes */}
         {member.notes && (
-          <Card>
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-medium">Notes</CardTitle>
+          <Card className="overflow-hidden">
+            <CardHeader className="p-3 pb-2 sm:p-4 sm:pb-2">
+              <CardTitle className="text-xs font-medium text-muted-foreground sm:text-sm">
+                Notes
+              </CardTitle>
             </CardHeader>
-            <CardContent>
-              <p className="text-sm whitespace-pre-wrap">{member.notes}</p>
+            <CardContent className="p-3 pt-0 sm:p-4 sm:pt-0">
+              <p className="whitespace-pre-wrap text-xs sm:text-sm">{member.notes}</p>
             </CardContent>
           </Card>
         )}
@@ -238,42 +295,34 @@ export function MemberDetailClient({ member, activeTab }: MemberDetailClientProp
 
       {/* School Tab */}
       {member.member_type === 'child' && (
-        <TabsContent value="school" className="space-y-4">
+        <TabsContent value="school" className="space-y-3 sm:space-y-4">
           <SchoolSection member={member} />
         </TabsContent>
       )}
 
       {/* Fees Tab */}
       {member.member_type === 'child' && currentEnrolment && (
-        <TabsContent value="fees" className="space-y-4">
+        <TabsContent value="fees" className="space-y-3 sm:space-y-4">
           <SchoolFeesList enrolment={currentEnrolment} />
         </TabsContent>
       )}
 
       {/* Activities Tab */}
       {member.member_type === 'child' && (
-        <TabsContent value="activities" className="space-y-4">
+        <TabsContent value="activities" className="space-y-3 sm:space-y-4">
           <ExtracurricularList member={member} />
         </TabsContent>
       )}
 
       {/* Documents Tab */}
-      <TabsContent value="documents" className="space-y-4">
-        <MemberDocuments
-          familyMember={member}
-          onAddDocument={() => setDocumentUploadOpen(true)}
-        />
+      <TabsContent value="documents" className="space-y-3 sm:space-y-4">
+        <MemberDocuments familyMember={member} onAddDocument={handleOpenDocumentUpload} />
       </TabsContent>
 
       {/* Dialogs */}
       <FamilyMemberDialog
         open={editDialogOpen}
-        onOpenChange={(open) => {
-          setEditDialogOpen(open);
-          if (!open) {
-            router.refresh();
-          }
-        }}
+        onOpenChange={handleEditDialogChange}
         member={member}
       />
 
@@ -281,10 +330,7 @@ export function MemberDetailClient({ member, activeTab }: MemberDetailClientProp
         open={documentUploadOpen}
         onOpenChange={setDocumentUploadOpen}
         familyMember={member}
-        onSuccess={() => {
-          setDocumentUploadOpen(false);
-          loadData();
-        }}
+        onSuccess={handleDocumentUploadSuccess}
       />
     </>
   );

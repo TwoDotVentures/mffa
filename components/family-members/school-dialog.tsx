@@ -1,3 +1,15 @@
+/**
+ * School Dialog Component
+ *
+ * Dialog for adding/editing school records.
+ * Mobile-first responsive design with:
+ * - Full-screen dialog on mobile
+ * - Touch-friendly inputs
+ * - Scrollable content area
+ * - Responsive grid layouts
+ *
+ * @module components/family-members/school-dialog
+ */
 'use client';
 
 import { useState, useEffect } from 'react';
@@ -9,6 +21,7 @@ import {
   DialogDescription,
   DialogHeader,
   DialogTitle,
+  DialogFooter,
 } from '@/components/ui/dialog';
 import {
   Form,
@@ -33,12 +46,17 @@ import { createSchool, updateSchool } from '@/lib/family-members/actions';
 import type { School, SchoolFormData, SchoolType, SchoolSector } from '@/lib/types';
 
 interface SchoolDialogProps {
+  /** Whether dialog is open */
   open: boolean;
+  /** Callback to change open state */
   onOpenChange: (open: boolean) => void;
+  /** School to edit (undefined for create) */
   school?: School;
+  /** Callback on successful save */
   onSuccess?: (school: School) => void;
 }
 
+/** Available school types */
 const schoolTypes: { value: SchoolType; label: string }[] = [
   { value: 'preschool', label: 'Preschool/Kindy' },
   { value: 'primary', label: 'Primary' },
@@ -48,6 +66,7 @@ const schoolTypes: { value: SchoolType; label: string }[] = [
   { value: 'other', label: 'Other' },
 ];
 
+/** Available school sectors */
 const schoolSectors: { value: SchoolSector; label: string }[] = [
   { value: 'public', label: 'Public' },
   { value: 'catholic', label: 'Catholic' },
@@ -56,6 +75,7 @@ const schoolSectors: { value: SchoolSector; label: string }[] = [
   { value: 'other', label: 'Other' },
 ];
 
+/** Australian states for dropdown */
 const australianStates = [
   { value: 'QLD', label: 'Queensland' },
   { value: 'NSW', label: 'New South Wales' },
@@ -67,6 +87,10 @@ const australianStates = [
   { value: 'ACT', label: 'Australian Capital Territory' },
 ];
 
+/**
+ * School Dialog Component
+ * Form dialog for creating and editing schools
+ */
 export function SchoolDialog({ open, onOpenChange, school, onSuccess }: SchoolDialogProps) {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
@@ -88,7 +112,7 @@ export function SchoolDialog({ open, onOpenChange, school, onSuccess }: SchoolDi
     },
   });
 
-  // Update form when school changes (for editing)
+  /** Update form when school changes */
   useEffect(() => {
     if (school) {
       form.reset({
@@ -121,6 +145,7 @@ export function SchoolDialog({ open, onOpenChange, school, onSuccess }: SchoolDi
     }
   }, [school, form]);
 
+  /** Handle form submission */
   const onSubmit = async (data: SchoolFormData) => {
     setLoading(true);
     try {
@@ -128,7 +153,6 @@ export function SchoolDialog({ open, onOpenChange, school, onSuccess }: SchoolDi
       if (isEditing) {
         result = await updateSchool(school.id, data);
       } else {
-        // No authentication required - app runs without auth
         result = await createSchool(data);
       }
       onOpenChange(false);
@@ -143,243 +167,288 @@ export function SchoolDialog({ open, onOpenChange, school, onSuccess }: SchoolDi
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-[550px]">
-        <DialogHeader>
-          <DialogTitle>{isEditing ? 'Edit School' : 'Add School'}</DialogTitle>
-          <DialogDescription>
+      <DialogContent className="flex max-h-[100dvh] flex-col gap-0 overflow-hidden p-0 sm:max-h-[90vh] sm:max-w-[550px]">
+        {/* Header */}
+        <DialogHeader className="border-b p-4 sm:p-6">
+          <DialogTitle className="text-lg">{isEditing ? 'Edit School' : 'Add School'}</DialogTitle>
+          <DialogDescription className="text-sm">
             {isEditing
               ? 'Update the school details.'
               : 'Add a new school to enrol family members.'}
           </DialogDescription>
         </DialogHeader>
 
-        <Form {...form}>
-          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
-            {/* Name */}
-            <FormField
-              control={form.control}
-              name="name"
-              rules={{ required: 'School name is required' }}
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>School Name</FormLabel>
-                  <FormControl>
-                    <Input placeholder="e.g., Brisbane Grammar School" {...field} />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-
-            {/* Type and Sector */}
-            <div className="grid gap-4 sm:grid-cols-2">
+        {/* Scrollable Form Content */}
+        <div className="flex-1 overflow-y-auto p-4 sm:p-6">
+          <Form {...form}>
+            <form id="school-form" onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+              {/* Name */}
               <FormField
                 control={form.control}
-                name="school_type"
-                rules={{ required: 'School type is required' }}
+                name="name"
+                rules={{ required: 'School name is required' }}
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>School Type</FormLabel>
-                    <Select onValueChange={field.onChange} value={field.value}>
+                    <FormLabel className="text-xs sm:text-sm">School Name</FormLabel>
+                    <FormControl>
+                      <Input
+                        placeholder="e.g., Brisbane Grammar School"
+                        className="h-11 text-base sm:h-10 sm:text-sm"
+                        {...field}
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              {/* Type and Sector */}
+              <div className="grid gap-3 sm:grid-cols-2 sm:gap-4">
+                <FormField
+                  control={form.control}
+                  name="school_type"
+                  rules={{ required: 'School type is required' }}
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel className="text-xs sm:text-sm">School Type</FormLabel>
+                      <Select onValueChange={field.onChange} value={field.value}>
+                        <FormControl>
+                          <SelectTrigger className="h-11 text-sm sm:h-10">
+                            <SelectValue placeholder="Select type" />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          {schoolTypes.map((type) => (
+                            <SelectItem key={type.value} value={type.value} className="py-2.5 sm:py-2">
+                              {type.label}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <FormField
+                  control={form.control}
+                  name="sector"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel className="text-xs sm:text-sm">Sector</FormLabel>
+                      <Select
+                        onValueChange={field.onChange}
+                        value={field.value || ''}
+                      >
+                        <FormControl>
+                          <SelectTrigger className="h-11 text-sm sm:h-10">
+                            <SelectValue placeholder="Select sector" />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          {schoolSectors.map((sector) => (
+                            <SelectItem key={sector.value} value={sector.value} className="py-2.5 sm:py-2">
+                              {sector.label}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
+
+              {/* Address */}
+              <FormField
+                control={form.control}
+                name="address"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel className="text-xs sm:text-sm">Street Address</FormLabel>
+                    <FormControl>
+                      <Input
+                        placeholder="Street address"
+                        className="h-11 text-base sm:h-10 sm:text-sm"
+                        {...field}
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              {/* Suburb, State, Postcode - Stack on mobile */}
+              <div className="grid gap-3 sm:grid-cols-3 sm:gap-4">
+                <FormField
+                  control={form.control}
+                  name="suburb"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel className="text-xs sm:text-sm">Suburb</FormLabel>
                       <FormControl>
-                        <SelectTrigger>
-                          <SelectValue placeholder="Select type" />
-                        </SelectTrigger>
+                        <Input
+                          placeholder="Suburb"
+                          className="h-11 text-base sm:h-10 sm:text-sm"
+                          {...field}
+                        />
                       </FormControl>
-                      <SelectContent>
-                        {schoolTypes.map((type) => (
-                          <SelectItem key={type.value} value={type.value}>
-                            {type.label}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
 
-              <FormField
-                control={form.control}
-                name="sector"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Sector</FormLabel>
-                    <Select
-                      onValueChange={field.onChange}
-                      value={field.value || ''}
-                    >
+                <FormField
+                  control={form.control}
+                  name="state"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel className="text-xs sm:text-sm">State</FormLabel>
+                      <Select
+                        onValueChange={field.onChange}
+                        value={field.value || 'QLD'}
+                      >
+                        <FormControl>
+                          <SelectTrigger className="h-11 text-sm sm:h-10">
+                            <SelectValue />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          {australianStates.map((state) => (
+                            <SelectItem key={state.value} value={state.value} className="py-2.5 sm:py-2">
+                              {state.value}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <FormField
+                  control={form.control}
+                  name="postcode"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel className="text-xs sm:text-sm">Postcode</FormLabel>
                       <FormControl>
-                        <SelectTrigger>
-                          <SelectValue placeholder="Select sector" />
-                        </SelectTrigger>
+                        <Input
+                          placeholder="4000"
+                          className="h-11 text-base sm:h-10 sm:text-sm"
+                          {...field}
+                        />
                       </FormControl>
-                      <SelectContent>
-                        {schoolSectors.map((sector) => (
-                          <SelectItem key={sector.value} value={sector.value}>
-                            {sector.label}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-            </div>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
 
-            {/* Address */}
-            <FormField
-              control={form.control}
-              name="address"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Street Address</FormLabel>
-                  <FormControl>
-                    <Input placeholder="Street address" {...field} />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-
-            {/* Suburb, State, Postcode */}
-            <div className="grid gap-4 sm:grid-cols-3">
-              <FormField
-                control={form.control}
-                name="suburb"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Suburb</FormLabel>
-                    <FormControl>
-                      <Input placeholder="Suburb" {...field} />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-
-              <FormField
-                control={form.control}
-                name="state"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>State</FormLabel>
-                    <Select
-                      onValueChange={field.onChange}
-                      value={field.value || 'QLD'}
-                    >
+              {/* Contact: Phone & Email */}
+              <div className="grid gap-3 sm:grid-cols-2 sm:gap-4">
+                <FormField
+                  control={form.control}
+                  name="phone"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel className="text-xs sm:text-sm">Phone</FormLabel>
                       <FormControl>
-                        <SelectTrigger>
-                          <SelectValue />
-                        </SelectTrigger>
+                        <Input
+                          type="tel"
+                          placeholder="(07) 1234 5678"
+                          className="h-11 text-base sm:h-10 sm:text-sm"
+                          {...field}
+                        />
                       </FormControl>
-                      <SelectContent>
-                        {australianStates.map((state) => (
-                          <SelectItem key={state.value} value={state.value}>
-                            {state.value}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
 
+                <FormField
+                  control={form.control}
+                  name="email"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel className="text-xs sm:text-sm">Email</FormLabel>
+                      <FormControl>
+                        <Input
+                          type="email"
+                          placeholder="admin@school.edu.au"
+                          className="h-11 text-base sm:h-10 sm:text-sm"
+                          {...field}
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
+
+              {/* Website */}
               <FormField
                 control={form.control}
-                name="postcode"
+                name="website"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Postcode</FormLabel>
+                    <FormLabel className="text-xs sm:text-sm">Website</FormLabel>
                     <FormControl>
-                      <Input placeholder="4000" {...field} />
+                      <Input
+                        type="url"
+                        placeholder="https://www.school.edu.au"
+                        className="h-11 text-base sm:h-10 sm:text-sm"
+                        {...field}
+                      />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
                 )}
               />
-            </div>
 
-            {/* Contact: Phone & Email */}
-            <div className="grid gap-4 sm:grid-cols-2">
+              {/* Notes */}
               <FormField
                 control={form.control}
-                name="phone"
+                name="notes"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Phone</FormLabel>
+                    <FormLabel className="text-xs sm:text-sm">Notes</FormLabel>
                     <FormControl>
-                      <Input type="tel" placeholder="(07) 1234 5678" {...field} />
+                      <Textarea
+                        placeholder="Any additional notes about the school..."
+                        className="resize-none text-base sm:text-sm"
+                        rows={2}
+                        {...field}
+                      />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
                 )}
               />
+            </form>
+          </Form>
+        </div>
 
-              <FormField
-                control={form.control}
-                name="email"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Email</FormLabel>
-                    <FormControl>
-                      <Input type="email" placeholder="admin@school.edu.au" {...field} />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-            </div>
-
-            {/* Website */}
-            <FormField
-              control={form.control}
-              name="website"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Website</FormLabel>
-                  <FormControl>
-                    <Input type="url" placeholder="https://www.school.edu.au" {...field} />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-
-            {/* Notes */}
-            <FormField
-              control={form.control}
-              name="notes"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Notes</FormLabel>
-                  <FormControl>
-                    <Textarea
-                      placeholder="Any additional notes about the school..."
-                      className="resize-none"
-                      rows={2}
-                      {...field}
-                    />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-
-            {/* Actions */}
-            <div className="flex justify-end gap-3 pt-4">
-              <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
-                Cancel
-              </Button>
-              <Button type="submit" disabled={loading}>
-                {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                {isEditing ? 'Save Changes' : 'Add School'}
-              </Button>
-            </div>
-          </form>
-        </Form>
+        {/* Footer */}
+        <DialogFooter className="flex-col-reverse gap-2 border-t p-4 sm:flex-row sm:gap-3 sm:p-6">
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => onOpenChange(false)}
+            className="h-11 w-full sm:h-10 sm:w-auto"
+          >
+            Cancel
+          </Button>
+          <Button
+            type="submit"
+            form="school-form"
+            disabled={loading}
+            className="h-11 w-full sm:h-10 sm:w-auto"
+          >
+            {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+            {isEditing ? 'Save Changes' : 'Add School'}
+          </Button>
+        </DialogFooter>
       </DialogContent>
     </Dialog>
   );

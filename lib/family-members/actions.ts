@@ -1,3 +1,9 @@
+/**
+ * @fileoverview Server actions for managing family members, schools, and related data.
+ * Provides CRUD operations for family members, school enrolments, fees, and activities.
+ * @module lib/family-members/actions
+ */
+
 'use server';
 
 import { createClient } from '@/lib/supabase/server';
@@ -5,6 +11,7 @@ import { revalidatePath } from 'next/cache';
 import type {
   FamilyMemberExtended,
   FamilyMemberFormData,
+  FamilyMemberInsert,
   FeeType,
   FeeTypeFormData,
   ActivityType,
@@ -13,6 +20,7 @@ import type {
   FrequencyFormData,
   School,
   SchoolFormData,
+  SchoolInsert,
   SchoolYear,
   SchoolYearFormData,
   SchoolTerm,
@@ -26,12 +34,19 @@ import type {
   ExtracurricularFormData,
   MemberDocument,
   MemberDocumentFormData,
+  RelationshipType,
+  GenderType,
 } from '@/lib/types';
 
 // ============================================
 // Family Members CRUD
 // ============================================
 
+/**
+ * Retrieves all family members ordered by primary status, type, and name.
+ *
+ * @returns Promise resolving to an array of FamilyMemberExtended objects
+ */
 export async function getFamilyMembers(): Promise<FamilyMemberExtended[]> {
   const supabase = await createClient();
   const { data, error } = await supabase
@@ -64,7 +79,7 @@ export async function createFamilyMember(
 
   // Clean up form data - convert empty strings to null for optional fields
   // No user_id required - app runs without authentication
-  const cleanedData = {
+  const cleanedData: FamilyMemberInsert = {
     name: formData.name,
     member_type: formData.member_type,
     relationship: formData.relationship || null,
@@ -79,7 +94,7 @@ export async function createFamilyMember(
 
   const { data, error } = await supabase
     .from('family_members')
-    .insert(cleanedData as any)
+    .insert(cleanedData)
     .select()
     .single();
 
@@ -364,12 +379,23 @@ export async function createSchool(
 ): Promise<School> {
   const supabase = await createClient();
   // No user_id required - app runs without authentication
+  const insertData: SchoolInsert = {
+    name: formData.name,
+    school_type: formData.school_type,
+    sector: formData.sector || null,
+    address: formData.address || null,
+    suburb: formData.suburb || null,
+    state: formData.state || 'QLD',
+    postcode: formData.postcode || null,
+    phone: formData.phone || null,
+    email: formData.email || null,
+    website: formData.website || null,
+    notes: formData.notes || null,
+  };
+
   const { data, error } = await supabase
     .from('schools')
-    .insert({
-      ...formData,
-      state: formData.state || 'QLD',
-    } as any)
+    .insert(insertData)
     .select()
     .single();
 
@@ -950,7 +976,7 @@ export async function unlinkDocumentFromMember(id: string): Promise<void> {
 // Summary & Aggregation Functions
 // ============================================
 
-export async function getFamilyMemberSummary(familyMemberId: string) {
+export async function getFamilyMemberSummary(familyMemberId: string): Promise<FamilyMemberExtended> {
   const supabase = await createClient();
 
   // Get member with enrolments and activities
@@ -981,7 +1007,7 @@ export async function getFamilyMemberSummary(familyMemberId: string) {
     .eq('year', currentYear)
     .in(
       'enrolment_id',
-      (enrolments || []).map((e) => e.id)
+      (enrolments || []).map((e: { id: string }) => e.id)
     );
 
   // Get active activities with costs
@@ -1001,8 +1027,9 @@ export async function getFamilyMemberSummary(familyMemberId: string) {
     .eq('family_member_id', familyMemberId);
 
   // Calculate totals
-  const totalSchoolFees = (fees || []).reduce((sum, f) => sum + Number(f.amount), 0);
-  const unpaidFeesCount = (fees || []).filter((f) => !f.is_paid).length;
+  type FeeRec = { amount: number; is_paid: boolean };
+  const totalSchoolFees = ((fees || []) as FeeRec[]).reduce((sum: number, f: FeeRec) => sum + Number(f.amount), 0);
+  const unpaidFeesCount = ((fees || []) as FeeRec[]).filter((f: FeeRec) => !f.is_paid).length;
 
   const totalActivitiesCost = (activities as Array<{ cost_amount?: number | null; cost_frequency?: { per_year_multiplier?: number | null } | null; registration_fee?: number | null; equipment_cost?: number | null; uniform_cost?: number | null; other_costs?: number | null }> || []).reduce((sum, a) => {
     const multiplier = a.cost_frequency?.per_year_multiplier || 1;
@@ -1027,20 +1054,35 @@ export async function getFamilyMemberSummary(familyMemberId: string) {
     }
   }
 
+  type EnrolmentWithSchool = { school?: unknown; year_level?: string | null };
+  const enrolment = (enrolments?.[0] as EnrolmentWithSchool | undefined);
   return {
     ...member,
     age,
-    current_school: enrolments?.[0]?.school,
-    current_year_level: enrolments?.[0]?.year_level,
+    current_school: enrolment?.school as School | undefined,
+    current_year_level: enrolment?.year_level ?? undefined,
     total_school_fees_year: totalSchoolFees,
     unpaid_fees_count: unpaidFeesCount,
     active_activities_count: (activities || []).length,
     total_activities_cost_year: totalActivitiesCost,
     document_count: documentCount || 0,
-  };
+  } as FamilyMemberExtended;
 }
 
-export async function getFamilyFeesOverview(year?: number) {
+interface FamilyFeesOverviewResult {
+  total_school_fees: number;
+  total_paid: number;
+  total_remaining: number;
+  total_activities_cost: number;
+  by_child: {
+    family_member: FamilyMemberExtended;
+    school_fees: number;
+    paid_fees: number;
+    activities_cost: number;
+  }[];
+}
+
+export async function getFamilyFeesOverview(year?: number): Promise<FamilyFeesOverviewResult> {
   const supabase = await createClient();
   const currentYear = year || new Date().getFullYear();
 
@@ -1070,7 +1112,7 @@ export async function getFamilyFeesOverview(year?: number) {
       .select('id')
       .eq('family_member_id', child.id);
 
-    const enrolmentIds = (enrolments || []).map((e) => e.id);
+    const enrolmentIds = (enrolments || []).map((e: { id: string }) => e.id);
 
     // Get fees
     const { data: fees } = await supabase
@@ -1079,10 +1121,11 @@ export async function getFamilyFeesOverview(year?: number) {
       .eq('year', currentYear)
       .in('enrolment_id', enrolmentIds);
 
-    const schoolFees = (fees || []).reduce((sum, f) => sum + Number(f.amount), 0);
-    const paidFees = (fees || [])
-      .filter((f) => f.is_paid)
-      .reduce((sum, f) => sum + (Number(f.paid_amount) || Number(f.amount)), 0);
+    type FeeRec2 = { amount: number; is_paid: boolean; paid_amount?: number };
+    const schoolFees = ((fees || []) as FeeRec2[]).reduce((sum: number, f: FeeRec2) => sum + Number(f.amount), 0);
+    const paidFees = ((fees || []) as FeeRec2[])
+      .filter((f: FeeRec2) => f.is_paid)
+      .reduce((sum: number, f: FeeRec2) => sum + (Number(f.paid_amount) || Number(f.amount)), 0);
 
     // Get activities cost
     const { data: activities } = await supabase

@@ -1,3 +1,9 @@
+/**
+ * @fileoverview Server actions for managing budgets and tracking spending.
+ * Provides CRUD operations, progress tracking, and budget alerts.
+ * @module lib/budgets/actions
+ */
+
 'use server';
 
 import { revalidatePath } from 'next/cache';
@@ -8,6 +14,11 @@ import type { Budget, BudgetFormData, BudgetProgress, BudgetSummary, Transaction
 // Budget CRUD Operations
 // ============================================
 
+/**
+ * Retrieves all active budgets for the current user with category information.
+ *
+ * @returns Promise resolving to an array of Budget objects
+ */
 export async function getBudgets(): Promise<Budget[]> {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
@@ -27,6 +38,12 @@ export async function getBudgets(): Promise<Budget[]> {
   return (data || []) as unknown as Budget[];
 }
 
+/**
+ * Retrieves a single budget by ID with category information.
+ *
+ * @param id - The UUID of the budget to retrieve
+ * @returns Promise resolving to the Budget object or null if not found
+ */
 export async function getBudget(id: string): Promise<Budget | null> {
   const supabase = await createClient();
 
@@ -43,6 +60,13 @@ export async function getBudget(id: string): Promise<Budget | null> {
   return data as unknown as Budget;
 }
 
+/**
+ * Creates a new budget with the provided form data.
+ * Automatically looks up the category name if a category_id is provided.
+ *
+ * @param formData - The budget data including name, amount, period, and category
+ * @returns Promise resolving to success status and optional error message
+ */
 export async function createBudget(formData: BudgetFormData): Promise<{ success: boolean; error?: string }> {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
@@ -87,6 +111,13 @@ export async function createBudget(formData: BudgetFormData): Promise<{ success:
   return { success: true };
 }
 
+/**
+ * Updates an existing budget with new data.
+ *
+ * @param id - The UUID of the budget to update
+ * @param formData - The updated budget data
+ * @returns Promise resolving to success status and optional error message
+ */
 export async function updateBudget(
   id: string,
   formData: Partial<BudgetFormData>
@@ -118,6 +149,12 @@ export async function updateBudget(
   return { success: true };
 }
 
+/**
+ * Soft-deletes a budget by setting is_active to false.
+ *
+ * @param id - The UUID of the budget to delete
+ * @returns Promise resolving to success status and optional error message
+ */
 export async function deleteBudget(id: string): Promise<{ success: boolean; error?: string }> {
   const supabase = await createClient();
 
@@ -205,6 +242,13 @@ function calculatePeriodDates(period: string): { startDate: string; endDate: str
   };
 }
 
+/**
+ * Calculates the current progress for a specific budget.
+ * Computes spent amount, remaining budget, percentage used, and daily allowance.
+ *
+ * @param budgetId - The UUID of the budget to calculate progress for
+ * @returns Promise resolving to BudgetProgress object or null if not found
+ */
 export async function getBudgetProgress(budgetId: string): Promise<BudgetProgress | null> {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
@@ -246,7 +290,8 @@ export async function getBudgetProgress(budgetId: string): Promise<BudgetProgres
   }
 
   // Calculate totals
-  const spent = Math.abs((transactions || []).reduce((sum, t) => sum + t.amount, 0));
+  type TxRec = { amount: number };
+  const spent = Math.abs((transactions || []).reduce((sum: number, t: TxRec) => sum + t.amount, 0));
   const remaining = Math.max(0, budget.amount - spent);
   const percentage = budget.amount > 0 ? (spent / budget.amount) * 100 : 0;
   const dailyAllowance = daysRemaining > 0 ? remaining / daysRemaining : 0;
@@ -264,6 +309,11 @@ export async function getBudgetProgress(budgetId: string): Promise<BudgetProgres
   };
 }
 
+/**
+ * Retrieves a summary of all budgets including totals and alert counts.
+ *
+ * @returns Promise resolving to BudgetSummary with aggregated budget data
+ */
 export async function getBudgetSummary(): Promise<BudgetSummary> {
   const budgets = await getBudgets();
 
@@ -301,6 +351,11 @@ export async function getBudgetSummary(): Promise<BudgetSummary> {
 // Budget Alerts
 // ============================================
 
+/**
+ * Checks all budgets and creates notifications for those approaching or exceeding limits.
+ *
+ * @returns Promise that resolves when all alerts have been processed
+ */
 export async function checkBudgetAlerts(): Promise<void> {
   const summary = await getBudgetSummary();
 
@@ -312,6 +367,12 @@ export async function checkBudgetAlerts(): Promise<void> {
   }
 }
 
+/**
+ * Creates a notification for a budget that is approaching or over its limit.
+ * Only creates one notification per budget per day.
+ *
+ * @param progress - The BudgetProgress object containing budget status
+ */
 async function createBudgetNotification(progress: BudgetProgress): Promise<void> {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();

@@ -6,9 +6,11 @@ import type {
   Deduction,
   DeductionFormData,
   DeductionCategory,
+  DeductionInsert,
   PersonType,
   WFHCalculation,
 } from '@/lib/types';
+import type { Json } from '@/lib/supabase/database.types';
 import {
   getCurrentFinancialYear,
   calculateWFHDeduction,
@@ -100,16 +102,25 @@ export async function addDeduction(
     !!formData.receipt_url
   );
 
+  const insertData: DeductionInsert = {
+    person: formData.person,
+    category: formData.category,
+    description: formData.description,
+    amount: formData.amount,
+    date: formData.date,
+    user_id: user.id,
+    financial_year: fy,
+    is_approved: !flagResult.flag, // Auto-approve if not flagged
+    receipt_url: formData.receipt_url || null,
+    linked_transaction_id: formData.linked_transaction_id || null,
+    calculation_method: formData.calculation_method || null,
+    calculation_details: formData.calculation_details || null,
+    notes: formData.notes || null,
+  };
+
   const { data, error } = await supabase
     .from('deductions')
-    .insert([
-      {
-        ...formData,
-        user_id: user.id,
-        financial_year: fy,
-        is_approved: !flagResult.flag, // Auto-approve if not flagged
-      } as any,
-    ])
+    .insert([insertData])
     .select()
     .single();
 
@@ -135,9 +146,14 @@ export async function updateDeduction(
   } = await supabase.auth.getUser();
   if (!user) return { success: false, error: 'Not authenticated' };
 
+  const updateData: Partial<DeductionInsert> & { updated_at: string } = {
+    ...formData,
+    updated_at: new Date().toISOString(),
+  };
+
   const { error } = await supabase
     .from('deductions')
-    .update({ ...formData, updated_at: new Date().toISOString() } as any)
+    .update(updateData)
     .eq('id', id)
     .eq('user_id', user.id);
 
@@ -209,7 +225,7 @@ export async function addWFHDeduction(
     amount: calculation.total_deduction,
     date: periodEnd,
     calculation_method: 'fixed_rate',
-    calculation_details: calculation as unknown as Record<string, unknown>,
+    calculation_details: calculation as unknown as Json,
     notes: notes || `Period: ${periodStart} to ${periodEnd}`,
   });
 

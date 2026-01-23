@@ -1,3 +1,9 @@
+/**
+ * @fileoverview Server actions for managing financial documents.
+ * Provides CRUD operations, file uploads, vector search, and embedding generation.
+ * @module lib/documents/actions
+ */
+
 'use server';
 
 import { revalidatePath } from 'next/cache';
@@ -13,6 +19,13 @@ import type {
 // Document CRUD Operations
 // ============================================
 
+/**
+ * Retrieves documents with optional filters and generates signed download URLs.
+ * Supports filtering by entity type, document type, financial year, and search text.
+ *
+ * @param filters - Optional filters to apply to the query
+ * @returns Promise resolving to an array of Document objects with download URLs
+ */
 export async function getDocuments(filters?: DocumentFilters): Promise<Document[]> {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
@@ -45,8 +58,9 @@ export async function getDocuments(filters?: DocumentFilters): Promise<Document[
   }
 
   // Generate signed download URLs
+  type DocRow = { id: string; storage_path: string; [key: string]: unknown };
   const documentsWithUrls = await Promise.all(
-    (data || []).map(async (doc) => {
+    ((data || []) as DocRow[]).map(async (doc: DocRow) => {
       const { data: urlData } = await supabase.storage
         .from('documents')
         .createSignedUrl(doc.storage_path, 3600); // 1 hour expiry
@@ -57,6 +71,12 @@ export async function getDocuments(filters?: DocumentFilters): Promise<Document[
   return documentsWithUrls as unknown as Document[];
 }
 
+/**
+ * Retrieves a single document by ID with a signed download URL.
+ *
+ * @param id - The UUID of the document to retrieve
+ * @returns Promise resolving to the Document object or null if not found
+ */
 export async function getDocument(id: string): Promise<Document | null> {
   const supabase = await createClient();
 
@@ -82,6 +102,13 @@ export async function getDocument(id: string): Promise<Document | null> {
   return data as unknown as Document;
 }
 
+/**
+ * Uploads a document file to Supabase Storage and creates a database record.
+ * Files are stored in user-specific paths with unique identifiers.
+ *
+ * @param formData - FormData containing file and metadata fields
+ * @returns Promise resolving to success status, optional error, and created Document
+ */
 export async function uploadDocument(formData: FormData): Promise<{ success: boolean; error?: string; data?: Document }> {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
@@ -155,6 +182,13 @@ export async function uploadDocument(formData: FormData): Promise<{ success: boo
   return { success: true, data: data as unknown as Document };
 }
 
+/**
+ * Updates document metadata (not the file itself).
+ *
+ * @param id - The UUID of the document to update
+ * @param updates - Partial document data to update
+ * @returns Promise resolving to success status and optional error
+ */
 export async function updateDocument(
   id: string,
   updates: Partial<DocumentUploadData>
@@ -183,6 +217,13 @@ export async function updateDocument(
   return { success: true };
 }
 
+/**
+ * Deletes a document from both storage and database.
+ * Also removes associated embeddings via cascade delete.
+ *
+ * @param id - The UUID of the document to delete
+ * @returns Promise resolving to success status and optional error
+ */
 export async function deleteDocument(id: string): Promise<{ success: boolean; error?: string }> {
   const supabase = await createClient();
 
@@ -226,6 +267,15 @@ export async function deleteDocument(id: string): Promise<{ success: boolean; er
 // Document Search (RAG)
 // ============================================
 
+/**
+ * Searches documents using vector similarity (RAG).
+ * Generates an embedding for the query and finds similar document chunks.
+ *
+ * @param query - Natural language search query
+ * @param filters - Optional filters for entity type and document type
+ * @param limit - Maximum number of results to return (default: 5)
+ * @returns Promise resolving to an array of DocumentSearchResult objects
+ */
 export async function searchDocuments(
   query: string,
   filters?: { entity_type?: string; document_type?: string },
@@ -266,6 +316,12 @@ export async function searchDocuments(
 // Embedding Generation
 // ============================================
 
+/**
+ * Generates a text embedding using OpenAI's embedding API.
+ *
+ * @param text - The text to generate an embedding for
+ * @returns Promise resolving to embedding vector or null on error
+ */
 async function generateEmbedding(text: string): Promise<number[] | null> {
   const apiKey = process.env.OPENAI_API_KEY;
   if (!apiKey) {
@@ -303,6 +359,13 @@ async function generateEmbedding(text: string): Promise<number[] | null> {
 // Document Processing (Embedding Generation)
 // ============================================
 
+/**
+ * Processes a document to generate embeddings for vector search.
+ * Downloads the file, extracts text, splits into chunks, and generates embeddings.
+ *
+ * @param documentId - The UUID of the document to process
+ * @returns Promise resolving to success status and optional error
+ */
 export async function processDocumentForEmbeddings(documentId: string): Promise<{ success: boolean; error?: string }> {
   const supabase = await createClient();
 
@@ -381,6 +444,14 @@ export async function processDocumentForEmbeddings(documentId: string): Promise<
   }
 }
 
+/**
+ * Splits text into chunks for embedding generation.
+ * Attempts to split on paragraph boundaries to maintain context.
+ *
+ * @param text - The text to split
+ * @param maxChars - Maximum characters per chunk
+ * @returns Array of text chunks
+ */
 function splitIntoChunks(text: string, maxChars: number): string[] {
   // Split by paragraphs first
   const paragraphs = text.split(/\n\n+/);
@@ -412,6 +483,12 @@ function splitIntoChunks(text: string, maxChars: number): string[] {
 // Document Stats
 // ============================================
 
+/**
+ * Calculates document statistics for the current user.
+ * Groups documents by entity type and document type.
+ *
+ * @returns Promise resolving to document counts by category
+ */
 export async function getDocumentStats(): Promise<{
   totalDocuments: number;
   byEntity: Record<string, number>;

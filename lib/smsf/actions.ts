@@ -3,6 +3,11 @@
 import { createClient } from '@/lib/supabase/server';
 import { revalidatePath } from 'next/cache';
 import { getFinancialYear, getContributionCaps } from './utils';
+import type {
+  SmsfMemberInsert,
+  SmsfContributionInsert,
+  SmsfTransactionInsert,
+} from '@/lib/types';
 
 // ============================================================================
 // TYPES
@@ -279,16 +284,18 @@ export async function createSmsfMember(formData: SmsfMemberFormData): Promise<Sm
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) throw new Error('Not authenticated');
 
+  const insertData: SmsfMemberInsert = {
+    fund_id: formData.fund_id,
+    name: formData.name,
+    date_of_birth: formData.date_of_birth || null,
+    preservation_age: formData.preservation_age || null,
+    total_super_balance: formData.total_super_balance || 0,
+    member_status: formData.member_status || 'accumulation',
+  };
+
   const { data, error } = await supabase
     .from('smsf_members')
-    .insert({
-      fund_id: formData.fund_id,
-      name: formData.name,
-      date_of_birth: formData.date_of_birth || null,
-      preservation_age: formData.preservation_age || null,
-      total_super_balance: formData.total_super_balance || 0,
-      member_status: formData.member_status || 'accumulation',
-    } as any)
+    .insert(insertData)
     .select()
     .single();
 
@@ -390,17 +397,19 @@ export async function createSmsfContribution(formData: SmsfContributionFormData)
   const contributionDate = new Date(formData.date);
   const financialYear = getFinancialYear(contributionDate);
 
+  const insertData: SmsfContributionInsert = {
+    fund_id: formData.fund_id,
+    member_id: formData.member_id,
+    contribution_type: formData.contribution_type,
+    amount: formData.amount,
+    date: formData.date,
+    financial_year: financialYear,
+    description: formData.description || null,
+  };
+
   const { data, error } = await supabase
     .from('smsf_contributions')
-    .insert({
-      fund_id: formData.fund_id,
-      member_id: formData.member_id,
-      contribution_type: formData.contribution_type,
-      amount: formData.amount,
-      date: formData.date,
-      financial_year: financialYear,
-      description: formData.description || null,
-    } as any)
+    .insert(insertData)
     .select()
     .single();
 
@@ -480,15 +489,20 @@ export async function getMemberContributionSummary(
 
   const caps = getContributionCaps(financialYear);
 
+  // Define contribution type for type safety
+  type ContributionRecord = { contribution_type: string; amount: number };
+  type CarryForwardRecord = { financial_year: string; unused_amount: number; eligible_for_carry_forward: boolean };
+
   // Calculate concessional contributions
-  const concessionalContribs = (contributions || [])
-    .filter((c: any) => c.contribution_type === 'concessional')
-    .reduce((sum: number, c: any) => sum + Number(c.amount), 0);
+  const contributionList = (contributions || []) as ContributionRecord[];
+  const concessionalContribs = contributionList
+    .filter((c) => c.contribution_type === 'concessional')
+    .reduce((sum, c) => sum + Number(c.amount), 0);
 
   // Calculate non-concessional contributions (including spouse, downsizer are separate)
-  const nonConcessionalContribs = (contributions || [])
-    .filter((c: any) => c.contribution_type === 'non_concessional')
-    .reduce((sum: number, c: any) => sum + Number(c.amount), 0);
+  const nonConcessionalContribs = contributionList
+    .filter((c) => c.contribution_type === 'non_concessional')
+    .reduce((sum, c) => sum + Number(c.amount), 0);
 
   // Get carry-forward amounts (last 5 years)
   const { data: carryForwardData } = await supabase
@@ -501,9 +515,10 @@ export async function getMemberContributionSummary(
   // Calculate available carry-forward
   // Eligible if total super balance < $500,000 at previous 30 June
   const isEligible = (member.total_super_balance || 0) < 500000;
-  const carryForwardBreakdown = (carryForwardData || [])
-    .filter((cf: any) => cf.eligible_for_carry_forward && cf.unused_amount > 0)
-    .map((cf: any) => ({
+  const carryForwardList = (carryForwardData || []) as CarryForwardRecord[];
+  const carryForwardBreakdown = carryForwardList
+    .filter((cf) => cf.eligible_for_carry_forward && cf.unused_amount > 0)
+    .map((cf) => ({
       year: cf.financial_year,
       amount: Number(cf.unused_amount),
     }));
@@ -652,18 +667,20 @@ export async function createSmsfTransaction(formData: SmsfTransactionFormData): 
   const transactionDate = new Date(formData.date);
   const financialYear = getFinancialYear(transactionDate);
 
+  const insertData: SmsfTransactionInsert = {
+    fund_id: formData.fund_id,
+    investment_id: formData.investment_id || null,
+    member_id: formData.member_id || null,
+    type: formData.type,
+    amount: formData.amount,
+    date: formData.date,
+    financial_year: financialYear,
+    description: formData.description || null,
+  };
+
   const { data, error } = await supabase
     .from('smsf_transactions')
-    .insert({
-      fund_id: formData.fund_id,
-      investment_id: formData.investment_id || null,
-      member_id: formData.member_id || null,
-      type: formData.type,
-      amount: formData.amount,
-      date: formData.date,
-      financial_year: financialYear,
-      description: formData.description || null,
-    } as any)
+    .insert(insertData)
     .select()
     .single();
 
@@ -834,12 +851,17 @@ export async function getSmsfDashboard(fundId: string): Promise<SmsfDashboardDat
     .order('date', { ascending: false })
     .limit(10);
 
-  // Calculate investment summary
-  const investmentList = investments || [];
-  const totalInvestmentValue = investmentList.reduce((sum: number, inv: any) => sum + Number(inv.current_value), 0);
-  const totalCostBase = investmentList.reduce((sum: number, inv: any) => sum + Number(inv.cost_base), 0);
+  // Type definitions for dashboard calculations
+  type InvestmentRecord = { asset_type: string; current_value: number; cost_base: number };
+  type ContributionRecord = { contribution_type: string; amount: number };
+  type MemberRecord = { total_super_balance: number };
 
-  const investmentByType = investmentList.reduce((acc: any, inv: any) => {
+  // Calculate investment summary
+  const investmentList = (investments || []) as InvestmentRecord[];
+  const totalInvestmentValue = investmentList.reduce((sum, inv) => sum + Number(inv.current_value), 0);
+  const totalCostBase = investmentList.reduce((sum, inv) => sum + Number(inv.cost_base), 0);
+
+  const investmentByType = investmentList.reduce<Record<string, number>>((acc, inv) => {
     const type = inv.asset_type;
     if (!acc[type]) acc[type] = 0;
     acc[type] += Number(inv.current_value);
@@ -848,15 +870,15 @@ export async function getSmsfDashboard(fundId: string): Promise<SmsfDashboardDat
 
   const investmentTypeBreakdown = Object.entries(investmentByType).map(([type, value]) => ({
     type,
-    value: value as number,
-    percentage: totalInvestmentValue > 0 ? ((value as number) / totalInvestmentValue) * 100 : 0,
+    value,
+    percentage: totalInvestmentValue > 0 ? (value / totalInvestmentValue) * 100 : 0,
   }));
 
   // Calculate contribution summary
-  const contributionList = contributions || [];
-  const totalContributions = contributionList.reduce((sum: number, c: any) => sum + Number(c.amount), 0);
+  const contributionList = (contributions || []) as ContributionRecord[];
+  const totalContributions = contributionList.reduce((sum, c) => sum + Number(c.amount), 0);
 
-  const contributionByType = contributionList.reduce((acc: any, c: any) => {
+  const contributionByType = contributionList.reduce<Record<string, number>>((acc, c) => {
     const type = c.contribution_type;
     if (!acc[type]) acc[type] = 0;
     acc[type] += Number(c.amount);
@@ -865,12 +887,12 @@ export async function getSmsfDashboard(fundId: string): Promise<SmsfDashboardDat
 
   const contributionTypeBreakdown = Object.entries(contributionByType).map(([type, amount]) => ({
     type,
-    amount: amount as number,
+    amount,
   }));
 
   // Calculate total balance (sum of member balances)
-  const memberList = members || [];
-  const totalBalance = memberList.reduce((sum: number, m: any) => sum + Number(m.total_super_balance), 0);
+  const memberList = (members || []) as MemberRecord[];
+  const totalBalance = memberList.reduce((sum, m) => sum + Number(m.total_super_balance), 0);
 
   return {
     fund: fund as unknown as SmsfFund,

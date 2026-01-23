@@ -1,6 +1,19 @@
 import { tool } from 'ai';
 import { z } from 'zod';
 import { createClient } from '@/lib/supabase/server';
+import type {
+  TransactionWithCategory,
+  BeneficiaryDistributionAccumulator,
+  AccountRecord,
+  SmsfMemberBalanceRecord,
+  SmsfInvestmentRecord,
+  SmsfContributionRecord,
+  SmsfCarryForwardRecord,
+  TrustIncomeRecord,
+  TrustDistributionRecord,
+  TrustBeneficiaryRecord,
+  InvestmentByTypeAccumulator,
+} from '@/lib/types';
 
 /**
  * AI Accountant Tools
@@ -51,10 +64,9 @@ export const getTransactions = tool({
     if (error) return { error: error.message };
 
     // Filter by category name if provided (need to do this post-query)
-    let results = data || [];
+    let results = (data || []) as TransactionWithCategory[];
     if (params.category) {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      results = results.filter((t: any) =>
+      results = results.filter((t) =>
         t.category?.name?.toLowerCase().includes(params.category!.toLowerCase())
       );
     }
@@ -151,8 +163,8 @@ export const getAccounts = tool({
 
     if (error) return { error: error.message };
 
-    const accounts = data || [];
-    const totalBalance = accounts.reduce((sum, a) => sum + (a.current_balance || 0), 0);
+    const accounts = (data || []) as AccountRecord[];
+    const totalBalance = accounts.reduce((sum: number, a) => sum + (a.current_balance || 0), 0);
 
     return { accounts, totalBalance, count: accounts.length };
   },
@@ -185,11 +197,11 @@ export const getIncome = tool({
 
     if (error) return { error: error.message };
 
-    let results = data || [];
+    let results = (data || []) as TransactionWithCategory[];
 
     // Filter by income type (category name)
     if (params.income_type) {
-      results = results.filter((t: any) =>
+      results = results.filter((t) =>
         t.category?.name?.toLowerCase().includes(params.income_type!.toLowerCase())
       );
     }
@@ -217,16 +229,16 @@ export const getNetWorth = tool({
 
     if (error) return { error: error.message };
 
-    const accountsList = accounts || [];
+    const accountsList = (accounts || []) as AccountRecord[];
 
     // Categorise accounts
     const assets = accountsList
       .filter((a) => ['bank', 'investment', 'cash'].includes(a.account_type))
-      .reduce((sum, a) => sum + (a.current_balance || 0), 0);
+      .reduce((sum: number, a) => sum + (a.current_balance || 0), 0);
 
     const liabilities = accountsList
       .filter((a) => ['credit', 'loan'].includes(a.account_type))
-      .reduce((sum, a) => sum + (a.current_balance || 0), 0);
+      .reduce((sum: number, a) => sum + (a.current_balance || 0), 0);
 
     const personalNetWorth = assets - liabilities;
 
@@ -254,8 +266,9 @@ export const getNetWorth = tool({
           .select('total_super_balance')
           .eq('fund_id', funds[0].id);
 
-        const smsfBalance = (members || []).reduce(
-          (sum, m) => sum + Number(m.total_super_balance || 0),
+        const membersList = (members || []) as SmsfMemberBalanceRecord[];
+        const smsfBalance = membersList.reduce(
+          (sum: number, m) => sum + Number(m.total_super_balance || 0),
           0
         );
 
@@ -306,8 +319,11 @@ export const getTaxSummary = tool({
       .gte('date', fyStart)
       .lte('date', fyEnd);
 
-    const totalIncome = (incomeData || []).reduce((sum, t) => sum + t.amount, 0);
-    const totalExpenses = (expenseData || []).reduce((sum, t) => sum + t.amount, 0);
+    type TransactionAmount = { amount: number; category?: { name?: string } | null };
+    const incomeList = (incomeData || []) as TransactionAmount[];
+    const expenseList = (expenseData || []) as TransactionAmount[];
+    const totalIncome = incomeList.reduce((sum: number, t) => sum + t.amount, 0);
+    const totalExpenses = expenseList.reduce((sum: number, t) => sum + t.amount, 0);
 
     // Estimate tax (simplified calculation)
     const taxableIncome = totalIncome; // Would subtract deductions
@@ -554,8 +570,9 @@ export const getSmsfSummary = tool({
       .select('id, name, total_super_balance, member_status')
       .eq('fund_id', fund.id);
 
-    const memberList = members || [];
-    const totalBalance = memberList.reduce((sum, m) => sum + Number(m.total_super_balance || 0), 0);
+    type MemberRecord = { id: string; name: string; total_super_balance: number | null; member_status: string | null };
+    const memberList = (members || []) as MemberRecord[];
+    const totalBalance = memberList.reduce((sum: number, m) => sum + Number(m.total_super_balance || 0), 0);
 
     const result: {
       fundName: string;
@@ -570,7 +587,7 @@ export const getSmsfSummary = tool({
       abn: fund.abn,
       status: fund.fund_status || 'active',
       totalBalance,
-      members: memberList.map((m) => ({
+      members: memberList.map((m: MemberRecord) => ({
         name: m.name,
         balance: Number(m.total_super_balance || 0),
         status: m.member_status || 'active',
@@ -584,10 +601,11 @@ export const getSmsfSummary = tool({
         .select('asset_type, current_value')
         .eq('fund_id', fund.id);
 
-      const investmentList = investments || [];
-      const totalInvestments = investmentList.reduce((sum, i) => sum + Number(i.current_value || 0), 0);
+      type InvestmentRecord = { asset_type: string; current_value: number | null };
+      const investmentList = (investments || []) as InvestmentRecord[];
+      const totalInvestments = investmentList.reduce((sum: number, i) => sum + Number(i.current_value || 0), 0);
 
-      const byType = investmentList.reduce((acc: Record<string, number>, i) => {
+      const byType = investmentList.reduce<Record<string, number>>((acc, i) => {
         const type = i.asset_type;
         acc[type] = (acc[type] || 0) + Number(i.current_value || 0);
         return acc;
@@ -666,16 +684,17 @@ export const getSmsfContributions = tool({
     }
 
     // Filter by member name if provided
-    let relevantMembers = members;
+    type SmsfMember = { id: string; name: string; total_super_balance: number | null };
+    let relevantMembers: SmsfMember[] = members;
     if (params.member) {
-      relevantMembers = members.filter((m) =>
+      relevantMembers = members.filter((m: SmsfMember) =>
         m.name.toLowerCase().includes(params.member!.toLowerCase())
       );
     }
 
     // Get contributions for each member
     const memberContributions = await Promise.all(
-      relevantMembers.map(async (member) => {
+      relevantMembers.map(async (member: SmsfMember) => {
         let query = supabase
           .from('smsf_contributions')
           .select('*')
@@ -688,16 +707,17 @@ export const getSmsfContributions = tool({
 
         const { data: contributions } = await query;
 
-        const contribList = contributions || [];
+        type ContribRecord = { contribution_type: string; amount: number; date: string; description?: string };
+        const contribList = (contributions || []) as ContribRecord[];
 
         // Calculate totals by type
         const concessional = contribList
           .filter((c) => c.contribution_type === 'concessional')
-          .reduce((sum, c) => sum + Number(c.amount), 0);
+          .reduce((sum: number, c) => sum + Number(c.amount), 0);
 
         const nonConcessional = contribList
           .filter((c) => c.contribution_type === 'non_concessional')
-          .reduce((sum, c) => sum + Number(c.amount), 0);
+          .reduce((sum: number, c) => sum + Number(c.amount), 0);
 
         // Caps for 2024-25
         const concessionalCap = 30000;
@@ -714,8 +734,10 @@ export const getSmsfContributions = tool({
           .order('financial_year', { ascending: false })
           .limit(5);
 
+        type CarryForwardRec = { financial_year: string; unused_amount: number | null };
+        const carryForwardList = (carryForwardData || []) as CarryForwardRec[];
         const carryForwardTotal = eligibleForCarryForward
-          ? (carryForwardData || []).reduce((sum, cf) => sum + Number(cf.unused_amount || 0), 0)
+          ? carryForwardList.reduce((sum: number, cf) => sum + Number(cf.unused_amount || 0), 0)
           : 0;
 
         return {
@@ -735,7 +757,7 @@ export const getSmsfContributions = tool({
             remaining: Math.max(0, nonConcessionalCap - nonConcessional),
             percentageUsed: (nonConcessional / nonConcessionalCap) * 100,
           },
-          contributions: contribList.map((c) => ({
+          contributions: contribList.map((c: ContribRecord) => ({
             date: c.date,
             type: c.contribution_type,
             amount: Number(c.amount),
@@ -789,15 +811,16 @@ export const getSmsfInvestments = tool({
 
     const { data: investments } = await query;
 
-    const investmentList = investments || [];
+    type InvRecord = { name: string; asset_type: string; units?: number; cost_base: number; current_value: number; income_ytd?: number; acquisition_date?: string };
+    const investmentList = (investments || []) as InvRecord[];
 
     // Calculate totals
-    const totalValue = investmentList.reduce((sum, i) => sum + Number(i.current_value), 0);
-    const totalCostBase = investmentList.reduce((sum, i) => sum + Number(i.cost_base), 0);
-    const totalIncome = investmentList.reduce((sum, i) => sum + Number(i.income_ytd || 0), 0);
+    const totalValue = investmentList.reduce((sum: number, i) => sum + Number(i.current_value), 0);
+    const totalCostBase = investmentList.reduce((sum: number, i) => sum + Number(i.cost_base), 0);
+    const totalIncome = investmentList.reduce((sum: number, i) => sum + Number(i.income_ytd || 0), 0);
 
     // Asset allocation
-    const byType = investmentList.reduce((acc: Record<string, number>, i) => {
+    const byType = investmentList.reduce<Record<string, number>>((acc, i) => {
       const type = i.asset_type;
       acc[type] = (acc[type] || 0) + Number(i.current_value);
       return acc;
@@ -814,7 +837,7 @@ export const getSmsfInvestments = tool({
         value,
         percentage: totalValue > 0 ? (value / totalValue) * 100 : 0,
       })),
-      investments: investmentList.map((i) => ({
+      investments: investmentList.map((i: InvRecord) => ({
         name: i.name,
         assetType: i.asset_type,
         units: i.units,
@@ -949,13 +972,15 @@ export const getTrustSummary = tool({
       .eq('trust_id', trust.id)
       .eq('financial_year', financialYear);
 
-    const incomeList = income || [];
-    const distributionList = distributions || [];
+    type IncomeRec = { amount: number; franking_credits: number };
+    type DistribRec = { beneficiary_id: string; beneficiary?: { name?: string }; amount: number; franking_credits_streamed: number };
+    const incomeList = (income || []) as IncomeRec[];
+    const distributionList = (distributions || []) as DistribRec[];
 
-    const totalIncome = incomeList.reduce((sum, i) => sum + Number(i.amount), 0);
-    const totalFranking = incomeList.reduce((sum, i) => sum + Number(i.franking_credits), 0);
-    const totalDistributed = distributionList.reduce((sum, d) => sum + Number(d.amount), 0);
-    const frankingDistributed = distributionList.reduce((sum, d) => sum + Number(d.franking_credits_streamed), 0);
+    const totalIncome = incomeList.reduce((sum: number, i) => sum + Number(i.amount), 0);
+    const totalFranking = incomeList.reduce((sum: number, i) => sum + Number(i.franking_credits), 0);
+    const totalDistributed = distributionList.reduce((sum: number, d) => sum + Number(d.amount), 0);
+    const frankingDistributed = distributionList.reduce((sum: number, d) => sum + Number(d.franking_credits_streamed), 0);
 
     // Calculate days until 30 June
     const now = new Date();
@@ -964,8 +989,8 @@ export const getTrustSummary = tool({
     const daysUntilEOFY = Math.ceil((eofy.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
 
     // Distribution by beneficiary
-    const distributionsByBeneficiary = distributionList.reduce((acc: Record<string, { name: string; amount: number; franking: number }>, d) => {
-      const name = (d.beneficiary as { name?: string })?.name || 'Unknown';
+    const distributionsByBeneficiary = distributionList.reduce<Record<string, { name: string; amount: number; franking: number }>>((acc, d) => {
+      const name = d.beneficiary?.name || 'Unknown';
       if (!acc[d.beneficiary_id]) {
         acc[d.beneficiary_id] = { name, amount: 0, franking: 0 };
       }
@@ -986,7 +1011,7 @@ export const getTrustSummary = tool({
       frankingCreditsAvailable: totalFranking - frankingDistributed,
       daysUntilEOFY,
       eoFYDeadline: daysUntilEOFY <= 60 ? `WARNING: ${daysUntilEOFY} days until 30 June distribution deadline` : null,
-      beneficiaries: (beneficiaries || []).map((b) => b.name),
+      beneficiaries: (beneficiaries || []).map((b: TrustBeneficiaryRecord) => b.name),
       distributionsByBeneficiary: Object.values(distributionsByBeneficiary),
     };
   },
@@ -1035,15 +1060,16 @@ export const getTrustIncome = tool({
 
     if (error) return { error: error.message };
 
-    const incomeList = income || [];
-    const totalIncome = incomeList.reduce((sum, i) => sum + Number(i.amount), 0);
-    const totalFranking = incomeList.reduce((sum, i) => sum + Number(i.franking_credits), 0);
+    type TrustIncRec = { date: string; source: string; income_type: string; amount: number; franking_credits: number };
+    const incomeList = (income || []) as TrustIncRec[];
+    const totalIncome = incomeList.reduce((sum: number, i) => sum + Number(i.amount), 0);
+    const totalFranking = incomeList.reduce((sum: number, i) => sum + Number(i.franking_credits), 0);
 
     return {
       financialYear,
       totalIncome,
       totalFrankingCredits: totalFranking,
-      incomeItems: incomeList.map((i) => ({
+      incomeItems: incomeList.map((i: TrustIncRec) => ({
         date: i.date,
         source: i.source,
         type: i.income_type,
@@ -1084,20 +1110,22 @@ export const getTrustDistributions = tool({
 
     if (error) return { error: error.message };
 
-    let filtered = distributions || [];
+    type TrustDistributionType = 'income' | 'capital' | 'mixed';
+    type DistRec = { beneficiary?: { name?: string }; amount: number; franking_credits_streamed: number; date: string; distribution_type: TrustDistributionType; is_paid: boolean };
+    let filtered = (distributions || []) as DistRec[];
 
     if (params.beneficiary_name) {
       filtered = filtered.filter((d) =>
-        (d.beneficiary as { name?: string })?.name?.toLowerCase().includes(params.beneficiary_name!.toLowerCase())
+        d.beneficiary?.name?.toLowerCase().includes(params.beneficiary_name!.toLowerCase())
       );
     }
 
-    const totalDistributed = filtered.reduce((sum, d) => sum + Number(d.amount), 0);
-    const totalFranking = filtered.reduce((sum, d) => sum + Number(d.franking_credits_streamed), 0);
+    const totalDistributed = filtered.reduce((sum: number, d) => sum + Number(d.amount), 0);
+    const totalFranking = filtered.reduce((sum: number, d) => sum + Number(d.franking_credits_streamed), 0);
 
     // Group by beneficiary
-    const byBeneficiary = filtered.reduce((acc: Record<string, { total: number; franking: number; distributions: any[] }>, d) => {
-      const name = (d.beneficiary as { name?: string })?.name || 'Unknown';
+    const byBeneficiary = filtered.reduce<Record<string, BeneficiaryDistributionAccumulator>>((acc, d: DistRec) => {
+      const name = d.beneficiary?.name || 'Unknown';
       if (!acc[name]) {
         acc[name] = { total: 0, franking: 0, distributions: [] };
       }
@@ -1156,8 +1184,10 @@ export const getFrankingCredits = tool({
       .eq('trust_id', trusts[0].id)
       .eq('financial_year', financialYear);
 
-    const creditsReceived = (income || []).reduce((sum, i) => sum + Number(i.franking_credits), 0);
-    const creditsDistributed = (distributions || []).reduce((sum, d) => sum + Number(d.franking_credits_streamed), 0);
+    type FrankingIncome = { franking_credits: number };
+    type FrankingDistrib = { franking_credits_streamed: number };
+    const creditsReceived = ((income || []) as FrankingIncome[]).reduce((sum: number, i) => sum + Number(i.franking_credits), 0);
+    const creditsDistributed = ((distributions || []) as FrankingDistrib[]).reduce((sum: number, d) => sum + Number(d.franking_credits_streamed), 0);
 
     return {
       financialYear,
@@ -1211,9 +1241,13 @@ export const calculateDistribution = tool({
       .eq('trust_id', trusts[0].id)
       .eq('financial_year', financialYear);
 
-    const totalIncome = (income || []).reduce((sum, i) => sum + Number(i.amount), 0);
-    const totalFranking = (income || []).reduce((sum, i) => sum + Number(i.franking_credits), 0);
-    const totalDistributed = (distributions || []).reduce((sum, d) => sum + Number(d.amount), 0);
+    type IncAmtRec = { amount: number; franking_credits: number };
+    type DistAmtRec = { amount: number };
+    const incomeData = (income || []) as IncAmtRec[];
+    const distributionData = (distributions || []) as DistAmtRec[];
+    const totalIncome = incomeData.reduce((sum: number, i) => sum + Number(i.amount), 0);
+    const totalFranking = incomeData.reduce((sum: number, i) => sum + Number(i.franking_credits), 0);
+    const totalDistributed = distributionData.reduce((sum: number, d) => sum + Number(d.amount), 0);
     const distributableAmount = totalIncome - totalDistributed;
 
     if (distributableAmount <= 0) {
@@ -1489,13 +1523,14 @@ export const getPersonalIncome = tool({
 
     if (error) return { error: error.message };
 
-    const incomeList = income || [];
-    const totalIncome = incomeList.reduce((sum, i) => sum + Number(i.amount), 0);
-    const totalFranking = incomeList.reduce((sum, i) => sum + Number(i.franking_credits || 0), 0);
-    const totalWithheld = incomeList.reduce((sum, i) => sum + Number(i.tax_withheld || 0), 0);
+    type PersonalIncRec = { date: string; source: string; income_type: string; amount: number; franking_credits?: number; tax_withheld?: number; is_taxable: boolean };
+    const incomeList = (income || []) as PersonalIncRec[];
+    const totalIncome = incomeList.reduce((sum: number, i) => sum + Number(i.amount), 0);
+    const totalFranking = incomeList.reduce((sum: number, i) => sum + Number(i.franking_credits || 0), 0);
+    const totalWithheld = incomeList.reduce((sum: number, i) => sum + Number(i.tax_withheld || 0), 0);
 
     // Group by type
-    const byType = incomeList.reduce((acc: Record<string, number>, i) => {
+    const byType = incomeList.reduce<Record<string, number>>((acc, i) => {
       acc[i.income_type] = (acc[i.income_type] || 0) + Number(i.amount);
       return acc;
     }, {});
@@ -1507,7 +1542,7 @@ export const getPersonalIncome = tool({
       totalFrankingCredits: totalFranking,
       totalTaxWithheld: totalWithheld,
       byType,
-      incomeItems: incomeList.map((i) => ({
+      incomeItems: incomeList.map((i: PersonalIncRec) => ({
         date: i.date,
         source: i.source,
         type: i.income_type,
@@ -1549,21 +1584,22 @@ export const getDeductions = tool({
 
     if (error) return { error: error.message };
 
-    const deductionList = deductions || [];
-    const totalDeductions = deductionList.reduce((sum, d) => sum + Number(d.amount), 0);
+    type DeductRec = { date: string; category: string; description: string; amount: number; is_approved: boolean; calculation_details?: { hours?: number } | null };
+    const deductionList = (deductions || []) as DeductRec[];
+    const totalDeductions = deductionList.reduce((sum: number, d) => sum + Number(d.amount), 0);
     const flaggedCount = deductionList.filter((d) => !d.is_approved).length;
 
     // Group by category
-    const byCategory = deductionList.reduce((acc: Record<string, number>, d) => {
+    const byCategory = deductionList.reduce<Record<string, number>>((acc, d) => {
       acc[d.category] = (acc[d.category] || 0) + Number(d.amount);
       return acc;
     }, {});
 
     // Get WFH specific details
     const wfhDeductions = deductionList.filter((d) => d.category === 'work_from_home');
-    const wfhTotal = wfhDeductions.reduce((sum, d) => sum + Number(d.amount), 0);
-    const wfhHours = wfhDeductions.reduce((sum, d) => {
-      const details = d.calculation_details as { hours?: number } | null;
+    const wfhTotal = wfhDeductions.reduce((sum: number, d) => sum + Number(d.amount), 0);
+    const wfhHours = wfhDeductions.reduce((sum: number, d) => {
+      const details = d.calculation_details;
       return sum + (details?.hours || 0);
     }, 0);
 
@@ -1578,13 +1614,12 @@ export const getDeductions = tool({
         totalDeduction: wfhTotal,
         ratePerHour: 0.67, // 2024-25 rate
       },
-      deductionItems: deductionList.map((d) => ({
+      deductionItems: deductionList.map((d: DeductRec) => ({
         date: d.date,
         description: d.description,
         category: d.category,
         amount: Number(d.amount),
         isApproved: d.is_approved,
-        hasReceipt: !!d.receipt_url,
       })),
       count: deductionList.length,
     };
@@ -1615,10 +1650,11 @@ export const getPersonalSuperContributions = tool({
 
     if (error) return { error: error.message };
 
-    const contributionList = contributions || [];
+    type SuperContribRec = { person: string; is_concessional: boolean; amount: number; date: string; fund_name: string; contribution_type?: string; employer_name?: string | null };
+    const contributionList = (contributions || []) as unknown as SuperContribRec[];
 
     // Calculate by person
-    const byPerson = contributionList.reduce((acc: Record<string, { concessional: number; nonConcessional: number }>, c) => {
+    const byPerson = contributionList.reduce<Record<string, { concessional: number; nonConcessional: number }>>((acc, c) => {
       if (!acc[c.person]) {
         acc[c.person] = { concessional: 0, nonConcessional: 0 };
       }
@@ -1655,7 +1691,8 @@ export const getPersonalSuperContributions = tool({
 
     // By type
     const byType = contributionList.reduce((acc: Record<string, number>, c) => {
-      acc[c.contribution_type] = (acc[c.contribution_type] || 0) + Number(c.amount);
+      const contribType = c.contribution_type || 'unknown';
+      acc[contribType] = (acc[contribType] || 0) + Number(c.amount);
       return acc;
     }, {});
 
@@ -1712,28 +1749,31 @@ export const getEnhancedTaxSummary = tool({
       .eq('financial_year', financialYear)
       .eq('person', params.person);
 
-    const income = incomeData || [];
-    const deductions = deductionsData || [];
-    const superContribs = superData || [];
+    type IncomeRec = { income_type: string; amount: number; franking_credits?: number; tax_withheld?: number };
+    type DeductionRec = { amount: number };
+    type SuperRec = { is_concessional: boolean; amount: number };
+    const income = (incomeData || []) as IncomeRec[];
+    const deductions = (deductionsData || []) as DeductionRec[];
+    const superContribs = (superData || []) as SuperRec[];
 
     // Income breakdown
     const incomeSummary = {
-      salary: income.filter((i) => ['salary', 'bonus'].includes(i.income_type)).reduce((sum, i) => sum + Number(i.amount), 0),
-      dividends: income.filter((i) => i.income_type === 'dividend').reduce((sum, i) => sum + Number(i.amount), 0),
-      trustDistributions: income.filter((i) => i.income_type === 'trust_distribution').reduce((sum, i) => sum + Number(i.amount), 0),
-      rental: income.filter((i) => i.income_type === 'rental').reduce((sum, i) => sum + Number(i.amount), 0),
-      capitalGains: income.filter((i) => i.income_type === 'capital_gain').reduce((sum, i) => sum + Number(i.amount), 0),
-      other: income.filter((i) => !['salary', 'bonus', 'dividend', 'trust_distribution', 'rental', 'capital_gain'].includes(i.income_type)).reduce((sum, i) => sum + Number(i.amount), 0),
+      salary: income.filter((i: IncomeRec) => ['salary', 'bonus'].includes(i.income_type)).reduce((sum: number, i) => sum + Number(i.amount), 0),
+      dividends: income.filter((i: IncomeRec) => i.income_type === 'dividend').reduce((sum: number, i) => sum + Number(i.amount), 0),
+      trustDistributions: income.filter((i: IncomeRec) => i.income_type === 'trust_distribution').reduce((sum: number, i) => sum + Number(i.amount), 0),
+      rental: income.filter((i: IncomeRec) => i.income_type === 'rental').reduce((sum: number, i) => sum + Number(i.amount), 0),
+      capitalGains: income.filter((i: IncomeRec) => i.income_type === 'capital_gain').reduce((sum: number, i) => sum + Number(i.amount), 0),
+      other: income.filter((i: IncomeRec) => !['salary', 'bonus', 'dividend', 'trust_distribution', 'rental', 'capital_gain'].includes(i.income_type)).reduce((sum: number, i) => sum + Number(i.amount), 0),
     };
-    const grossIncome = Object.values(incomeSummary).reduce((sum, v) => sum + v, 0);
-    const frankingCredits = income.reduce((sum, i) => sum + Number(i.franking_credits || 0), 0);
-    const taxWithheld = income.reduce((sum, i) => sum + Number(i.tax_withheld || 0), 0);
+    const grossIncome = Object.values(incomeSummary).reduce((sum: number, v) => sum + v, 0);
+    const frankingCredits = income.reduce((sum: number, i) => sum + Number(i.franking_credits || 0), 0);
+    const taxWithheld = income.reduce((sum: number, i) => sum + Number(i.tax_withheld || 0), 0);
 
     // Deductions breakdown
-    const totalDeductions = deductions.reduce((sum, d) => sum + Number(d.amount), 0);
+    const totalDeductions = deductions.reduce((sum: number, d) => sum + Number(d.amount), 0);
 
     // Super contributions
-    const concessionalSuper = superContribs.filter((s) => s.is_concessional).reduce((sum, s) => sum + Number(s.amount), 0);
+    const concessionalSuper = superContribs.filter((s: SuperRec) => s.is_concessional).reduce((sum: number, s) => sum + Number(s.amount), 0);
 
     // Tax calculation (2024-25 rates)
     const taxableIncome = Math.max(0, grossIncome - totalDeductions);
@@ -1813,7 +1853,7 @@ export const getEnhancedTaxSummary = tool({
       },
       deductions: {
         total: totalDeductions,
-        byCategory: deductions.reduce((acc: Record<string, number>, d) => {
+        byCategory: (deductions as { category: string; amount: number }[]).reduce<Record<string, number>>((acc, d) => {
           acc[d.category] = (acc[d.category] || 0) + Number(d.amount);
           return acc;
         }, {}),
@@ -1907,11 +1947,12 @@ export const getBudgetProgress = tool({
 
     if (error) return { error: error.message };
 
-    const budgetList = budgets || [];
+    type BudgetRec = { id: string; category_id?: string | null; period: string; amount: number; alert_threshold?: number; category?: { name?: string } };
+    const budgetList = (budgets || []) as BudgetRec[];
 
     // Calculate spending for each budget
     const budgetProgress = await Promise.all(
-      budgetList.map(async (budget) => {
+      budgetList.map(async (budget: BudgetRec) => {
         // Calculate period dates
         const now = new Date();
         let startDate: string;
@@ -1982,7 +2023,7 @@ export const getBudgetProgress = tool({
               .lte('date', endDate)
           : { data: [] };
 
-        const spent = (transactions || []).reduce((sum, t) => sum + Number(t.amount), 0);
+        const spent = (transactions || []).reduce((sum: number, t: { amount: number }) => sum + Number(t.amount), 0);
         const remaining = Number(budget.amount) - spent;
         const percentage = (spent / Number(budget.amount)) * 100;
 
@@ -2009,10 +2050,11 @@ export const getBudgetProgress = tool({
       })
     );
 
-    const totalBudgeted = budgetProgress.reduce((sum, b) => sum + b.budgetAmount, 0);
-    const totalSpent = budgetProgress.reduce((sum, b) => sum + b.spent, 0);
-    const overBudgetCount = budgetProgress.filter((b) => b.status === 'exceeded').length;
-    const warningCount = budgetProgress.filter((b) => b.status === 'warning').length;
+    type ProgressRec = { budgetAmount: number; spent: number; status: string };
+    const totalBudgeted = budgetProgress.reduce((sum: number, b: ProgressRec) => sum + b.budgetAmount, 0);
+    const totalSpent = budgetProgress.reduce((sum: number, b: ProgressRec) => sum + b.spent, 0);
+    const overBudgetCount = budgetProgress.filter((b: ProgressRec) => b.status === 'exceeded').length;
+    const warningCount = budgetProgress.filter((b: ProgressRec) => b.status === 'warning').length;
 
     return {
       summary: {
@@ -2096,7 +2138,7 @@ export const getBudgetAlerts = tool({
             .lte('date', endDate)
         : { data: [] };
 
-      const spent = (transactions || []).reduce((sum, t) => sum + Number(t.amount), 0);
+      const spent = (transactions || []).reduce((sum: number, t: { amount: number }) => sum + Number(t.amount), 0);
       const percentage = (spent / Number(budget.amount)) * 100;
       const alertThreshold = budget.alert_threshold || 80;
 
@@ -2177,10 +2219,11 @@ export const searchDocuments = tool({
 
     if (error) return { error: error.message };
 
+    type DocRec = { id: string; name: string; description?: string; entity_type: string; document_type: string; financial_year?: string; file_url?: string; file_size?: number; created_at: string; is_processed?: boolean };
     return {
       query: params.query,
       resultCount: (documents || []).length,
-      documents: (documents || []).map((d) => ({
+      documents: ((documents || []) as DocRec[]).map((d: DocRec) => ({
         id: d.id,
         name: d.name,
         description: d.description,
@@ -2223,16 +2266,17 @@ export const getDocumentsByEntity = tool({
 
     if (error) return { error: error.message };
 
-    const documentList = documents || [];
+    type DocListRec = { id: string; name: string; document_type: string; financial_year?: string; created_at: string };
+    const documentList = (documents || []) as DocListRec[];
 
     // Group by type
-    const byType = documentList.reduce((acc: Record<string, number>, d) => {
+    const byType = documentList.reduce<Record<string, number>>((acc, d: DocListRec) => {
       acc[d.document_type] = (acc[d.document_type] || 0) + 1;
       return acc;
     }, {});
 
     // Group by financial year
-    const byYear = documentList.reduce((acc: Record<string, number>, d) => {
+    const byYear = documentList.reduce<Record<string, number>>((acc, d: DocListRec) => {
       const year = d.financial_year || 'Unspecified';
       acc[year] = (acc[year] || 0) + 1;
       return acc;
@@ -2243,7 +2287,7 @@ export const getDocumentsByEntity = tool({
       totalDocuments: documentList.length,
       byType,
       byYear,
-      documents: documentList.map((d) => ({
+      documents: documentList.map((d: DocListRec) => ({
         id: d.id,
         name: d.name,
         documentType: d.document_type,
@@ -2285,15 +2329,16 @@ export const getNotifications = tool({
 
     if (error) return { error: error.message };
 
-    const notificationList = notifications || [];
-    const unreadCount = notificationList.filter((n) => !n.is_read).length;
-    const urgentCount = notificationList.filter((n) => n.priority === 'urgent' || n.priority === 'high').length;
+    type NotifRec = { id: string; is_read: boolean; priority: string; title: string; message: string; notification_type: string; created_at: string; scheduled_for?: string; link_url?: string };
+    const notificationList = (notifications || []) as NotifRec[];
+    const unreadCount = notificationList.filter((n: NotifRec) => !n.is_read).length;
+    const urgentCount = notificationList.filter((n: NotifRec) => n.priority === 'urgent' || n.priority === 'high').length;
 
     return {
       totalNotifications: notificationList.length,
       unreadCount,
       urgentCount,
-      notifications: notificationList.map((n) => ({
+      notifications: notificationList.map((n: NotifRec) => ({
         id: n.id,
         title: n.title,
         message: n.message,
@@ -2330,9 +2375,10 @@ export const getUpcomingDeadlines = tool({
       .lte('scheduled_for', futureDate.toISOString())
       .order('scheduled_for', { ascending: true });
 
-    const deadlines = (notifications || [])
-      .filter((n) => n.scheduled_for !== null)
-      .map((n) => ({
+    type DeadlineNotif = { title: string; message: string; scheduled_for: string | null; priority: string };
+    const deadlines = ((notifications || []) as DeadlineNotif[])
+      .filter((n: DeadlineNotif) => n.scheduled_for !== null)
+      .map((n: DeadlineNotif) => ({
         title: n.title,
         message: n.message,
         dueDate: n.scheduled_for!,
@@ -2359,7 +2405,8 @@ export const getUpcomingDeadlines = tool({
     }
 
     // Sort by due date
-    deadlines.sort((a, b) => new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime());
+    type DeadlineItem = { dueDate: string; title: string; message: string; priority: string; daysUntil: number };
+    deadlines.sort((a: DeadlineItem, b: DeadlineItem) => new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime());
 
     return {
       daysAhead: params.days_ahead,
