@@ -103,16 +103,10 @@ export async function getTransaction(id: string): Promise<Transaction | null> {
 export async function createTransaction(formData: TransactionFormData): Promise<{ success: boolean; error?: string }> {
   const supabase = await createClient();
 
-  const { data: { user } } = await supabase.auth.getUser();
-
-  if (!user) {
-    return { success: false, error: 'Not authenticated' };
-  }
-
   const { error } = await supabase
     .from('transactions')
     .insert({
-      user_id: user.id,
+      user_id: DEFAULT_USER_ID,
       account_id: formData.account_id,
       category_id: formData.category_id || null,
       date: formData.date,
@@ -439,16 +433,10 @@ export async function getCategories(): Promise<Category[]> {
 export async function createCategory(name: string, categoryType: 'income' | 'expense' | 'transfer'): Promise<{ success: boolean; category?: Category; error?: string }> {
   const supabase = await createClient();
 
-  const { data: { user } } = await supabase.auth.getUser();
-
-  if (!user) {
-    return { success: false, error: 'Not authenticated' };
-  }
-
   const { data, error } = await supabase
     .from('categories')
     .insert({
-      user_id: user.id,
+      user_id: DEFAULT_USER_ID,
       name,
       category_type: categoryType,
     })
@@ -466,10 +454,6 @@ export async function createCategory(name: string, categoryType: 'income' | 'exp
 
 export async function createDefaultCategories(): Promise<void> {
   const supabase = await createClient();
-
-  const { data: { user } } = await supabase.auth.getUser();
-
-  if (!user) return;
 
   const defaultCategories = [
     // Expense categories
@@ -503,7 +487,7 @@ export async function createDefaultCategories(): Promise<void> {
     await supabase
       .from('categories')
       .insert({
-        user_id: user.id,
+        user_id: DEFAULT_USER_ID,
         name: cat.name,
         category_type: cat.category_type,
         is_system: true,
@@ -544,12 +528,6 @@ export async function createCategorisationRule(
 ): Promise<{ success: boolean; rule?: CategorisationRule; error?: string }> {
   const supabase = await createClient();
 
-  const { data: { user } } = await supabase.auth.getUser();
-
-  if (!user) {
-    return { success: false, error: 'Not authenticated' };
-  }
-
   // Get the next priority value
   const { data: existingRules } = await supabase
     .from('categorisation_rules')
@@ -562,7 +540,7 @@ export async function createCategorisationRule(
   const { data, error } = await supabase
     .from('categorisation_rules')
     .insert({
-      user_id: user.id,
+      user_id: DEFAULT_USER_ID,
       category_id: formData.category_id,
       match_field: formData.match_field,
       match_type: formData.match_type,

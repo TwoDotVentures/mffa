@@ -35,14 +35,14 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { MoreHorizontal, Pencil, Trash2, Loader2, ArrowUpRight, ArrowDownLeft, ArrowRightLeft, Wand2, Search, X, Download, Tag, User, Calendar, FileText } from 'lucide-react';
+import { MoreHorizontal, Pencil, Trash2, Loader2, ArrowUpRight, ArrowDownLeft, ArrowRightLeft, Wand2, Search, X, Download, Tag, User, Calendar, FileText, Plus } from 'lucide-react';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Label } from '@/components/ui/label';
 import { TransactionDialog } from './transaction-dialog';
 import { CreateRuleDialog } from './create-rule-dialog';
 import { TopCategoriesChart } from './top-categories-chart';
 import { TopPayeesChart } from './top-payees-chart';
-import { deleteTransaction, deleteTransactions, updateTransactionsPayee, updateTransactionsCategory, updateTransactionCategory, updateTransactionsDescription } from '@/lib/transactions/actions';
+import { deleteTransaction, deleteTransactions, updateTransactionsPayee, updateTransactionsCategory, updateTransactionCategory, updateTransactionsDescription, createCategory } from '@/lib/transactions/actions';
 import { toast } from 'sonner';
 import type { Transaction, Account, Category } from '@/lib/types';
 
@@ -249,6 +249,9 @@ export function TransactionsList({ transactions, accounts, categories }: Transac
 
   // Filter state
   const [accountFilter, setAccountFilter] = useState<string>('all');
+  const [categoryFilter, setCategoryFilter] = useState<string>('all');
+  const [categoryFilterSearch, setCategoryFilterSearch] = useState('');
+  const [categoryFilterOpen, setCategoryFilterOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
 
   // Date range state - default to current financial year
@@ -275,6 +278,9 @@ export function TransactionsList({ transactions, accounts, categories }: Transac
   const [bulkCategoryValue, setBulkCategoryValue] = useState('');
   const [bulkCategoryLoading, setBulkCategoryLoading] = useState(false);
   const [bulkCategorySearch, setBulkCategorySearch] = useState('');
+  const [bulkNewCategoryName, setBulkNewCategoryName] = useState('');
+  const [bulkNewCategoryLoading, setBulkNewCategoryLoading] = useState(false);
+  const [showBulkNewCategoryInput, setShowBulkNewCategoryInput] = useState(false);
   const [bulkDescriptionOpen, setBulkDescriptionOpen] = useState(false);
   const [bulkDescriptionValue, setBulkDescriptionValue] = useState('');
   const [bulkDescriptionLoading, setBulkDescriptionLoading] = useState(false);
@@ -283,6 +289,12 @@ export function TransactionsList({ transactions, accounts, categories }: Transac
   const [editingCategoryId, setEditingCategoryId] = useState<string | null>(null);
   const [inlineCategoryLoading, setInlineCategoryLoading] = useState<string | null>(null);
   const [inlineCategorySearch, setInlineCategorySearch] = useState('');
+  const [inlineNewCategoryName, setInlineNewCategoryName] = useState('');
+  const [inlineNewCategoryLoading, setInlineNewCategoryLoading] = useState(false);
+  const [showInlineNewCategoryInput, setShowInlineNewCategoryInput] = useState(false);
+
+  // Local categories state (to update when new category is created)
+  const [localCategories, setLocalCategories] = useState<Category[]>(categories);
 
   // Filter transactions
   const filteredTransactions = transactions.filter((t) => {
@@ -296,6 +308,17 @@ export function TransactionsList({ transactions, accounts, categories }: Transac
     // Account filter
     if (accountFilter !== 'all' && t.account_id !== accountFilter) {
       return false;
+    }
+    // Category filter
+    if (categoryFilter !== 'all') {
+      if (categoryFilter === 'none') {
+        // Filter for transactions without a category
+        if (t.category_id) {
+          return false;
+        }
+      } else if (t.category_id !== categoryFilter) {
+        return false;
+      }
     }
     // Search filter (searches description, payee, category, account name)
     if (searchTerm) {
@@ -444,9 +467,54 @@ export function TransactionsList({ transactions, accounts, categories }: Transac
     setInlineCategoryLoading(null);
   };
 
+  // Create new category inline and apply to transaction
+  const handleInlineCreateCategory = async (transactionId: string, transaction: Transaction) => {
+    if (!inlineNewCategoryName.trim()) return;
+
+    setInlineNewCategoryLoading(true);
+    const categoryType = transaction.transaction_type;
+    const result = await createCategory(inlineNewCategoryName.trim(), categoryType);
+
+    if (result.success && result.category) {
+      toast.success(`Created category "${result.category.name}"`);
+      setLocalCategories(prev => [...prev, result.category!].sort((a, b) => a.name.localeCompare(b.name)));
+      // Now apply it to the transaction
+      await handleInlineCategoryUpdate(transactionId, result.category.id);
+      setInlineNewCategoryName('');
+      setShowInlineNewCategoryInput(false);
+    } else {
+      toast.error(result.error || 'Failed to create category');
+    }
+
+    setInlineNewCategoryLoading(false);
+  };
+
+  // Create new category for bulk edit
+  const handleBulkCreateCategory = async () => {
+    if (!bulkNewCategoryName.trim()) return;
+
+    setBulkNewCategoryLoading(true);
+    // Default to expense type for bulk operations
+    const result = await createCategory(bulkNewCategoryName.trim(), 'expense');
+
+    if (result.success && result.category) {
+      toast.success(`Created category "${result.category.name}"`);
+      setLocalCategories(prev => [...prev, result.category!].sort((a, b) => a.name.localeCompare(b.name)));
+      setBulkCategoryValue(result.category.id);
+      setBulkNewCategoryName('');
+      setShowBulkNewCategoryInput(false);
+    } else {
+      toast.error(result.error || 'Failed to create category');
+    }
+
+    setBulkNewCategoryLoading(false);
+  };
+
   // Clear selection when filters change
   const clearFilters = () => {
     setAccountFilter('all');
+    setCategoryFilter('all');
+    setCategoryFilterSearch('');
     setSearchTerm('');
     setDateRangePreset('this-fy');
     setCustomDateFrom('');
@@ -454,7 +522,7 @@ export function TransactionsList({ transactions, accounts, categories }: Transac
     setSelectedIds(new Set());
   };
 
-  const hasActiveFilters = accountFilter !== 'all' || searchTerm !== '' || dateRangePreset !== 'this-fy';
+  const hasActiveFilters = accountFilter !== 'all' || categoryFilter !== 'all' || searchTerm !== '' || dateRangePreset !== 'this-fy';
 
   // Handle preset change
   const handlePresetChange = (preset: DateRangePreset) => {
@@ -546,6 +614,85 @@ export function TransactionsList({ transactions, accounts, categories }: Transac
             ))}
           </SelectContent>
         </Select>
+
+        {/* Category Filter */}
+        <Popover open={categoryFilterOpen} onOpenChange={(open) => {
+          setCategoryFilterOpen(open);
+          if (!open) setCategoryFilterSearch('');
+        }}>
+          <PopoverTrigger asChild>
+            <Button variant="outline" className="w-full sm:w-[200px] justify-start text-left font-normal">
+              <Tag className="mr-2 h-4 w-4" />
+              <span className="truncate">
+                {categoryFilter === 'all'
+                  ? 'All Categories'
+                  : categoryFilter === 'none'
+                    ? 'No Category'
+                    : localCategories.find(c => c.id === categoryFilter)?.name || 'All Categories'}
+              </span>
+            </Button>
+          </PopoverTrigger>
+          <PopoverContent className="w-[220px] p-2" align="start">
+            <Input
+              placeholder="Search categories..."
+              value={categoryFilterSearch}
+              onChange={(e) => setCategoryFilterSearch(e.target.value)}
+              className="h-8 mb-2"
+              autoFocus
+            />
+            <div className="max-h-[280px] overflow-y-auto space-y-0.5">
+              {!categoryFilterSearch && (
+                <>
+                  <button
+                    className={`w-full text-left px-2 py-1.5 text-sm rounded hover:bg-muted transition-colors ${categoryFilter === 'all' ? 'bg-muted' : ''}`}
+                    onClick={() => {
+                      setCategoryFilter('all');
+                      setCategoryFilterOpen(false);
+                      setCategoryFilterSearch('');
+                    }}
+                  >
+                    All Categories
+                  </button>
+                  <button
+                    className={`w-full text-left px-2 py-1.5 text-sm rounded hover:bg-muted transition-colors ${categoryFilter === 'none' ? 'bg-muted' : ''}`}
+                    onClick={() => {
+                      setCategoryFilter('none');
+                      setCategoryFilterOpen(false);
+                      setCategoryFilterSearch('');
+                    }}
+                  >
+                    No Category
+                  </button>
+                  <div className="border-t my-1" />
+                </>
+              )}
+              {localCategories
+                .filter((cat) =>
+                  cat.name.toLowerCase().includes(categoryFilterSearch.toLowerCase())
+                )
+                .map((category) => (
+                  <button
+                    key={category.id}
+                    className={`w-full text-left px-2 py-1.5 text-sm rounded hover:bg-muted transition-colors ${categoryFilter === category.id ? 'bg-muted' : ''}`}
+                    onClick={() => {
+                      setCategoryFilter(category.id);
+                      setCategoryFilterOpen(false);
+                      setCategoryFilterSearch('');
+                    }}
+                  >
+                    {category.name}
+                  </button>
+                ))}
+              {localCategories.filter((cat) =>
+                cat.name.toLowerCase().includes(categoryFilterSearch.toLowerCase())
+              ).length === 0 && (
+                <p className="text-sm text-muted-foreground text-center py-2">
+                  No categories found
+                </p>
+              )}
+            </div>
+          </PopoverContent>
+        </Popover>
 
         {/* Date Range Filter */}
         <Popover open={datePickerOpen} onOpenChange={setDatePickerOpen}>
@@ -780,6 +927,8 @@ export function TransactionsList({ transactions, accounts, categories }: Transac
                         } else {
                           setEditingCategoryId(null);
                           setInlineCategorySearch('');
+                          setShowInlineNewCategoryInput(false);
+                          setInlineNewCategoryName('');
                         }
                       }}
                     >
@@ -804,7 +953,7 @@ export function TransactionsList({ transactions, accounts, categories }: Transac
                           className="h-8 mb-2"
                           autoFocus
                         />
-                        <div className="max-h-[250px] overflow-y-auto space-y-0.5">
+                        <div className="max-h-[200px] overflow-y-auto space-y-0.5">
                           {!inlineCategorySearch && (
                             <button
                               className={`w-full text-left px-2 py-1.5 text-sm rounded hover:bg-muted transition-colors ${!transaction.category_id ? 'bg-muted' : ''}`}
@@ -815,7 +964,7 @@ export function TransactionsList({ transactions, accounts, categories }: Transac
                               No Category
                             </button>
                           )}
-                          {categories
+                          {localCategories
                             .filter((cat) =>
                               cat.name.toLowerCase().includes(inlineCategorySearch.toLowerCase())
                             )
@@ -830,12 +979,66 @@ export function TransactionsList({ transactions, accounts, categories }: Transac
                                 {category.name}
                               </button>
                             ))}
-                          {categories.filter((cat) =>
+                          {localCategories.filter((cat) =>
                             cat.name.toLowerCase().includes(inlineCategorySearch.toLowerCase())
                           ).length === 0 && (
                             <p className="text-sm text-muted-foreground text-center py-2">
                               No categories found
                             </p>
+                          )}
+                        </div>
+                        <div className="border-t mt-2 pt-2">
+                          {showInlineNewCategoryInput ? (
+                            <div className="space-y-2">
+                              <Input
+                                placeholder="New category name..."
+                                value={inlineNewCategoryName}
+                                onChange={(e) => setInlineNewCategoryName(e.target.value)}
+                                className="h-8"
+                                autoFocus
+                                onKeyDown={(e) => {
+                                  if (e.key === 'Enter') {
+                                    e.preventDefault();
+                                    handleInlineCreateCategory(transaction.id, transaction);
+                                  } else if (e.key === 'Escape') {
+                                    setShowInlineNewCategoryInput(false);
+                                    setInlineNewCategoryName('');
+                                  }
+                                }}
+                              />
+                              <div className="flex gap-1">
+                                <Button
+                                  type="button"
+                                  size="sm"
+                                  className="flex-1 h-7"
+                                  onClick={() => handleInlineCreateCategory(transaction.id, transaction)}
+                                  disabled={inlineNewCategoryLoading || !inlineNewCategoryName.trim()}
+                                >
+                                  {inlineNewCategoryLoading && <Loader2 className="mr-1 h-3 w-3 animate-spin" />}
+                                  Add
+                                </Button>
+                                <Button
+                                  type="button"
+                                  size="sm"
+                                  variant="ghost"
+                                  className="h-7"
+                                  onClick={() => {
+                                    setShowInlineNewCategoryInput(false);
+                                    setInlineNewCategoryName('');
+                                  }}
+                                >
+                                  Cancel
+                                </Button>
+                              </div>
+                            </div>
+                          ) : (
+                            <button
+                              className="w-full text-left px-2 py-1.5 text-sm rounded hover:bg-muted transition-colors flex items-center gap-1 text-primary"
+                              onClick={() => setShowInlineNewCategoryInput(true)}
+                            >
+                              <Plus className="h-3.5 w-3.5" />
+                              Add new category
+                            </button>
                           )}
                         </div>
                       </PopoverContent>
@@ -988,6 +1191,8 @@ export function TransactionsList({ transactions, accounts, categories }: Transac
         if (!open) {
           setBulkCategoryValue('');
           setBulkCategorySearch('');
+          setShowBulkNewCategoryInput(false);
+          setBulkNewCategoryName('');
         }
       }}>
         <DialogContent>
@@ -1005,7 +1210,7 @@ export function TransactionsList({ transactions, accounts, categories }: Transac
               className="mb-3"
               autoFocus
             />
-            <div className="max-h-[250px] overflow-y-auto border rounded-md p-1 space-y-0.5">
+            <div className="max-h-[200px] overflow-y-auto border rounded-md p-1 space-y-0.5">
               {!bulkCategorySearch && (
                 <button
                   className={`w-full text-left px-3 py-2 text-sm rounded hover:bg-muted transition-colors ${bulkCategoryValue === 'none' ? 'bg-muted' : ''}`}
@@ -1014,7 +1219,7 @@ export function TransactionsList({ transactions, accounts, categories }: Transac
                   No Category
                 </button>
               )}
-              {categories
+              {localCategories
                 .filter((cat) =>
                   cat.name.toLowerCase().includes(bulkCategorySearch.toLowerCase())
                 )
@@ -1027,7 +1232,7 @@ export function TransactionsList({ transactions, accounts, categories }: Transac
                     {category.name}
                   </button>
                 ))}
-              {categories.filter((cat) =>
+              {localCategories.filter((cat) =>
                 cat.name.toLowerCase().includes(bulkCategorySearch.toLowerCase())
               ).length === 0 && (
                 <p className="text-sm text-muted-foreground text-center py-3">
@@ -1035,9 +1240,62 @@ export function TransactionsList({ transactions, accounts, categories }: Transac
                 </p>
               )}
             </div>
+            <div className="border-t mt-3 pt-3">
+              {showBulkNewCategoryInput ? (
+                <div className="space-y-2">
+                  <Input
+                    placeholder="New category name..."
+                    value={bulkNewCategoryName}
+                    onChange={(e) => setBulkNewCategoryName(e.target.value)}
+                    className="h-8"
+                    autoFocus
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault();
+                        handleBulkCreateCategory();
+                      } else if (e.key === 'Escape') {
+                        setShowBulkNewCategoryInput(false);
+                        setBulkNewCategoryName('');
+                      }
+                    }}
+                  />
+                  <div className="flex gap-2">
+                    <Button
+                      type="button"
+                      size="sm"
+                      className="flex-1"
+                      onClick={handleBulkCreateCategory}
+                      disabled={bulkNewCategoryLoading || !bulkNewCategoryName.trim()}
+                    >
+                      {bulkNewCategoryLoading && <Loader2 className="mr-1 h-3 w-3 animate-spin" />}
+                      Create & Select
+                    </Button>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => {
+                        setShowBulkNewCategoryInput(false);
+                        setBulkNewCategoryName('');
+                      }}
+                    >
+                      Cancel
+                    </Button>
+                  </div>
+                </div>
+              ) : (
+                <button
+                  className="w-full text-left px-3 py-2 text-sm rounded hover:bg-muted transition-colors flex items-center gap-1 text-primary"
+                  onClick={() => setShowBulkNewCategoryInput(true)}
+                >
+                  <Plus className="h-3.5 w-3.5" />
+                  Add new category
+                </button>
+              )}
+            </div>
             {bulkCategoryValue && (
-              <p className="mt-2 text-sm text-muted-foreground">
-                Selected: <span className="font-medium text-foreground">{bulkCategoryValue === 'none' ? 'No Category' : categories.find(c => c.id === bulkCategoryValue)?.name}</span>
+              <p className="mt-3 text-sm text-muted-foreground">
+                Selected: <span className="font-medium text-foreground">{bulkCategoryValue === 'none' ? 'No Category' : localCategories.find(c => c.id === bulkCategoryValue)?.name}</span>
               </p>
             )}
           </div>
