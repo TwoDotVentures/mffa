@@ -5,8 +5,13 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Bot, Database, User, Building2, ChevronRight } from 'lucide-react';
+import { getXeroConnections } from '@/lib/xero/actions';
 
-export default function SettingsPage() {
+export default async function SettingsPage() {
+  const { connections: xeroConnections } = await getXeroConnections();
+  const hasXeroConnection = xeroConnections.length > 0;
+  const activeConnection = xeroConnections.find(c => c.status === 'active');
+
   return (
     <>
       <PageHeader title="Settings" description="Configure your app preferences" />
@@ -25,13 +30,27 @@ export default function SettingsPage() {
             <CardContent>
               <Link href="/settings/bank-connections">
                 <div className="flex items-center justify-between rounded-lg border p-4 transition-colors hover:bg-muted/50">
-                  <div>
-                    <p className="font-medium">Import Transactions</p>
-                    <p className="text-sm text-muted-foreground">
-                      CSV upload from ING, CBA, NAB, ANZ, and more
-                    </p>
+                  <div className="flex items-center gap-3">
+                    <div>
+                      <p className="font-medium">
+                        {hasXeroConnection ? 'Xero Connected' : 'Connect to Xero'}
+                      </p>
+                      <p className="text-sm text-muted-foreground">
+                        {activeConnection
+                          ? `Syncing from ${activeConnection.tenant_name}`
+                          : 'Sync transactions automatically from Xero'
+                        }
+                      </p>
+                    </div>
                   </div>
-                  <ChevronRight className="h-5 w-5 text-muted-foreground" />
+                  <div className="flex items-center gap-2">
+                    {hasXeroConnection && (
+                      <Badge variant={activeConnection ? 'default' : 'secondary'} className={activeConnection ? 'bg-green-600' : ''}>
+                        {activeConnection ? 'Active' : 'Disconnected'}
+                      </Badge>
+                    )}
+                    <ChevronRight className="h-5 w-5 text-muted-foreground" />
+                  </div>
                 </div>
               </Link>
             </CardContent>

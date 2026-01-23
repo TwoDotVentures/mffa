@@ -37,80 +37,109 @@ interface CSVImportDialogProps {
   accounts: Account[];
 }
 
+function parseCSVLine(line: string): string[] {
+  const fields: string[] = [];
+  let field = '';
+  let inQuotes = false;
+
+  for (const char of line) {
+    if (char === '"') {
+      inQuotes = !inQuotes;
+    } else if (char === ',' && !inQuotes) {
+      fields.push(field.trim());
+      field = '';
+    } else {
+      field += char;
+    }
+  }
+  fields.push(field.trim());
+  return fields;
+}
+
+function parseDate(dateStr: string): string | null {
+  const dateFormats = [
+    /(\d{2})\/(\d{2})\/(\d{4})/, // DD/MM/YYYY
+    /(\d{4})-(\d{2})-(\d{2})/, // YYYY-MM-DD
+    /(\d{2})-(\d{2})-(\d{4})/, // DD-MM-YYYY
+  ];
+
+  for (const format of dateFormats) {
+    const match = dateStr.match(format);
+    if (match) {
+      if (format === dateFormats[0]) {
+        return `${match[3]}-${match[2]}-${match[1]}`;
+      } else if (format === dateFormats[1]) {
+        return `${match[1]}-${match[2]}-${match[3]}`;
+      } else {
+        return `${match[3]}-${match[2]}-${match[1]}`;
+      }
+    }
+  }
+  return null;
+}
+
 function parseCSV(text: string): CSVTransaction[] {
   const lines = text.trim().split('\n');
   if (lines.length < 2) return [];
 
   const transactions: CSVTransaction[] = [];
 
-  // Skip header row and parse each line
+  // Parse header row to detect column positions
+  const headerLine = lines[0].toLowerCase();
+  const headers = parseCSVLine(headerLine);
+
+  // Detect column indices
+  const dateIdx = headers.findIndex(h => h.includes('date'));
+  const descIdx = headers.findIndex(h => h.includes('description') || h.includes('narrative') || h.includes('details') || h.includes('memo'));
+  const payeeIdx = headers.findIndex(h => h.includes('payee') || h.includes('merchant') || h.includes('vendor'));
+  const amountIdx = headers.findIndex(h => h === 'amount' || h.includes('amount'));
+  const debitIdx = headers.findIndex(h => h.includes('debit') || h.includes('withdrawal'));
+  const creditIdx = headers.findIndex(h => h.includes('credit') || h.includes('deposit'));
+
+  // Fallback to positional parsing if headers not found
+  const useDateIdx = dateIdx >= 0 ? dateIdx : 0;
+  const useDescIdx = descIdx >= 0 ? descIdx : 1;
+
+  // Parse data rows
   for (let i = 1; i < lines.length; i++) {
     const line = lines[i];
     if (!line.trim()) continue;
 
-    // Handle CSV with quoted fields
-    const fields: string[] = [];
-    let field = '';
-    let inQuotes = false;
+    const fields = parseCSVLine(line);
+    if (fields.length < 3) continue;
 
-    for (const char of line) {
-      if (char === '"') {
-        inQuotes = !inQuotes;
-      } else if (char === ',' && !inQuotes) {
-        fields.push(field.trim());
-        field = '';
-      } else {
-        field += char;
+    // Parse date
+    const dateStr = fields[useDateIdx];
+    const date = parseDate(dateStr);
+    if (!date) continue;
+
+    // Parse description
+    const description = fields[useDescIdx];
+    if (!description) continue;
+
+    // Parse payee (if column exists)
+    const payee = payeeIdx >= 0 ? fields[payeeIdx] || undefined : undefined;
+
+    // Parse amount
+    let amount = 0;
+    if (amountIdx >= 0) {
+      // Single amount column
+      amount = parseFloat(fields[amountIdx].replace(/[^0-9.-]/g, '')) || 0;
+    } else if (debitIdx >= 0 && creditIdx >= 0) {
+      // Debit/Credit format
+      const debit = parseFloat(fields[debitIdx].replace(/[^0-9.-]/g, '')) || 0;
+      const credit = parseFloat(fields[creditIdx].replace(/[^0-9.-]/g, '')) || 0;
+      amount = credit - debit;
+    } else {
+      // Fallback: assume amount is in column after description (or payee if present)
+      const amtColIdx = payeeIdx >= 0 ? Math.max(useDescIdx, payeeIdx) + 1 : useDescIdx + 1;
+      if (amtColIdx < fields.length) {
+        amount = parseFloat(fields[amtColIdx].replace(/[^0-9.-]/g, '')) || 0;
       }
     }
-    fields.push(field.trim());
 
-    // Try to parse date, description, amount
-    // Common CSV formats: Date, Description, Debit, Credit, Balance
-    // or: Date, Description, Amount, Balance
-    if (fields.length >= 3) {
-      const dateStr = fields[0];
-      const description = fields[1];
-
-      // Parse date (try various formats)
-      let date = '';
-      const dateFormats = [
-        /(\d{2})\/(\d{2})\/(\d{4})/, // DD/MM/YYYY
-        /(\d{4})-(\d{2})-(\d{2})/, // YYYY-MM-DD
-        /(\d{2})-(\d{2})-(\d{4})/, // DD-MM-YYYY
-      ];
-
-      for (const format of dateFormats) {
-        const match = dateStr.match(format);
-        if (match) {
-          if (format === dateFormats[0]) {
-            date = `${match[3]}-${match[2]}-${match[1]}`;
-          } else if (format === dateFormats[1]) {
-            date = `${match[1]}-${match[2]}-${match[3]}`;
-          } else {
-            date = `${match[3]}-${match[2]}-${match[1]}`;
-          }
-          break;
-        }
-      }
-
-      if (!date) continue;
-
-      // Parse amount (handle debit/credit columns or single amount column)
-      let amount = 0;
-      if (fields.length >= 4) {
-        // Debit/Credit format
-        const debit = parseFloat(fields[2].replace(/[^0-9.-]/g, '')) || 0;
-        const credit = parseFloat(fields[3].replace(/[^0-9.-]/g, '')) || 0;
-        amount = credit - debit;
-      } else {
-        // Single amount column
-        amount = parseFloat(fields[2].replace(/[^0-9.-]/g, '')) || 0;
-      }
-
-      if (description && amount !== 0) {
-        transactions.push({ date, description, amount });
-      }
+    if (amount !== 0) {
+      transactions.push({ date, description, amount, payee });
     }
   }
 

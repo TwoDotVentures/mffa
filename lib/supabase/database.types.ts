@@ -2474,6 +2474,182 @@ export type Database = {
         }
         Relationships: []
       }
+      xero_connections: {
+        Row: {
+          id: string
+          user_id: string
+          access_token: string | null
+          refresh_token: string | null
+          token_expires_at: string | null
+          tenant_id: string
+          tenant_name: string | null
+          tenant_type: string | null
+          status: string
+          status_message: string | null
+          sync_enabled: boolean | null
+          sync_frequency: string | null
+          last_sync_at: string | null
+          next_sync_at: string | null
+          created_at: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          id?: string
+          user_id: string
+          access_token?: string | null
+          refresh_token?: string | null
+          token_expires_at?: string | null
+          tenant_id: string
+          tenant_name?: string | null
+          tenant_type?: string | null
+          status?: string
+          status_message?: string | null
+          sync_enabled?: boolean | null
+          sync_frequency?: string | null
+          last_sync_at?: string | null
+          next_sync_at?: string | null
+          created_at?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          id?: string
+          user_id?: string
+          access_token?: string | null
+          refresh_token?: string | null
+          token_expires_at?: string | null
+          tenant_id?: string
+          tenant_name?: string | null
+          tenant_type?: string | null
+          status?: string
+          status_message?: string | null
+          sync_enabled?: boolean | null
+          sync_frequency?: string | null
+          last_sync_at?: string | null
+          next_sync_at?: string | null
+          created_at?: string | null
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
+      xero_sync_logs: {
+        Row: {
+          id: string
+          connection_id: string
+          sync_type: string
+          status: string
+          accounts_synced: number | null
+          transactions_imported: number | null
+          transactions_skipped: number | null
+          transactions_updated: number | null
+          started_at: string | null
+          completed_at: string | null
+          duration_ms: number | null
+          error_code: string | null
+          error_message: string | null
+          api_calls_used: number | null
+          created_at: string | null
+        }
+        Insert: {
+          id?: string
+          connection_id: string
+          sync_type: string
+          status: string
+          accounts_synced?: number | null
+          transactions_imported?: number | null
+          transactions_skipped?: number | null
+          transactions_updated?: number | null
+          started_at?: string | null
+          completed_at?: string | null
+          duration_ms?: number | null
+          error_code?: string | null
+          error_message?: string | null
+          api_calls_used?: number | null
+          created_at?: string | null
+        }
+        Update: {
+          id?: string
+          connection_id?: string
+          sync_type?: string
+          status?: string
+          accounts_synced?: number | null
+          transactions_imported?: number | null
+          transactions_skipped?: number | null
+          transactions_updated?: number | null
+          started_at?: string | null
+          completed_at?: string | null
+          duration_ms?: number | null
+          error_code?: string | null
+          error_message?: string | null
+          api_calls_used?: number | null
+          created_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "xero_sync_logs_connection_id_fkey"
+            columns: ["connection_id"]
+            isOneToOne: false
+            referencedRelation: "xero_connections"
+            referencedColumns: ["id"]
+          }
+        ]
+      }
+      xero_account_mappings: {
+        Row: {
+          id: string
+          connection_id: string
+          xero_account_id: string
+          xero_account_name: string | null
+          xero_account_code: string | null
+          xero_account_type: string | null
+          local_account_id: string | null
+          is_sync_enabled: boolean | null
+          last_transaction_date: string | null
+          created_at: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          id?: string
+          connection_id: string
+          xero_account_id: string
+          xero_account_name?: string | null
+          xero_account_code?: string | null
+          xero_account_type?: string | null
+          local_account_id?: string | null
+          is_sync_enabled?: boolean | null
+          last_transaction_date?: string | null
+          created_at?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          id?: string
+          connection_id?: string
+          xero_account_id?: string
+          xero_account_name?: string | null
+          xero_account_code?: string | null
+          xero_account_type?: string | null
+          local_account_id?: string | null
+          is_sync_enabled?: boolean | null
+          last_transaction_date?: string | null
+          created_at?: string | null
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "xero_account_mappings_connection_id_fkey"
+            columns: ["connection_id"]
+            isOneToOne: false
+            referencedRelation: "xero_connections"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "xero_account_mappings_local_account_id_fkey"
+            columns: ["local_account_id"]
+            isOneToOne: false
+            referencedRelation: "accounts"
+            referencedColumns: ["id"]
+          }
+        ]
+      }
     }
     Views: {
       [_ in never]: never

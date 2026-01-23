@@ -4,6 +4,9 @@ import { revalidatePath } from 'next/cache';
 import { createClient } from '@/lib/supabase/server';
 import type { Transaction, TransactionFormData, TransactionFilters, Category, CSVTransaction, CategorisationRule } from '@/lib/types';
 
+// Default user ID for this app (no auth)
+const DEFAULT_USER_ID = '00000000-0000-0000-0000-000000000001';
+
 export async function getTransactions(filters?: TransactionFilters): Promise<Transaction[]> {
   const supabase = await createClient();
 
@@ -11,7 +14,7 @@ export async function getTransactions(filters?: TransactionFilters): Promise<Tra
     .from('transactions')
     .select(`
       *,
-      account:accounts(*),
+      account:accounts!transactions_account_id_fkey(*),
       category:categories(*)
     `)
     .order('date', { ascending: false })
@@ -49,7 +52,7 @@ export async function getTransactions(filters?: TransactionFilters): Promise<Tra
     query = query.lte('amount', Math.abs(filters.maxAmount));
   }
 
-  const { data, error } = await query.limit(500);
+  const { data, error } = await query;
 
   if (error) {
     console.error('Error fetching transactions:', error);
@@ -66,7 +69,7 @@ export async function getTransaction(id: string): Promise<Transaction | null> {
     .from('transactions')
     .select(`
       *,
-      account:accounts(*),
+      account:accounts!transactions_account_id_fkey(*),
       category:categories(*)
     `)
     .eq('id', id)
@@ -163,27 +166,45 @@ export async function deleteTransaction(id: string): Promise<{ success: boolean;
   return { success: true };
 }
 
+export async function deleteTransactions(ids: string[]): Promise<{ success: boolean; deleted: number; error?: string }> {
+  if (ids.length === 0) {
+    return { success: false, deleted: 0, error: 'No transactions selected' };
+  }
+
+  const supabase = await createClient();
+
+  const { error, count } = await supabase
+    .from('transactions')
+    .delete()
+    .in('id', ids);
+
+  if (error) {
+    console.error('Error deleting transactions:', error);
+    return { success: false, deleted: 0, error: error.message };
+  }
+
+  revalidatePath('/transactions');
+  revalidatePath('/accounts');
+  revalidatePath('/dashboard');
+  return { success: true, deleted: count || ids.length };
+}
+
 export async function importTransactions(
   accountId: string,
   transactions: CSVTransaction[]
 ): Promise<{ success: boolean; imported: number; error?: string }> {
   const supabase = await createClient();
 
-  const { data: { user } } = await supabase.auth.getUser();
-
-  if (!user) {
-    return { success: false, imported: 0, error: 'Not authenticated' };
-  }
-
   const importId = `import_${Date.now()}`;
 
   const transactionsToInsert = transactions.map((t) => ({
-    user_id: user.id,
+    user_id: DEFAULT_USER_ID,
     account_id: accountId,
     date: t.date,
     description: t.description,
     amount: Math.abs(t.amount),
     transaction_type: t.amount >= 0 ? 'income' : 'expense' as const,
+    payee: t.payee || null,
     import_id: importId,
   }));
 

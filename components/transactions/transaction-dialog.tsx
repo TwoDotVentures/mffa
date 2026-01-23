@@ -209,12 +209,15 @@ export function TransactionDialog({
               </div>
               <div className="grid gap-2">
                 <Label htmlFor="category">Category</Label>
-                <Select value={categoryId} onValueChange={setCategoryId}>
+                <Select
+                  value={categoryId || '__uncategorised__'}
+                  onValueChange={(v) => setCategoryId(v === '__uncategorised__' ? '' : v)}
+                >
                   <SelectTrigger>
                     <SelectValue placeholder="Select category" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="">Uncategorised</SelectItem>
+                    <SelectItem value="__uncategorised__">Uncategorised</SelectItem>
                     {filteredCategories.map((category) => (
                       <SelectItem key={category.id} value={category.id}>
                         {category.name}

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import {
@@ -22,7 +22,8 @@ import {
 } from '@/components/ui/select';
 import { Loader2 } from 'lucide-react';
 import { createAccount, updateAccount } from '@/lib/accounts/actions';
-import type { Account, AccountType } from '@/lib/types';
+import type { Account, AccountType, AccountGroup } from '@/lib/types';
+import { ACCOUNT_GROUP_LABELS } from '@/lib/types';
 
 interface AccountDialogProps {
   open: boolean;
@@ -38,6 +39,12 @@ const accountTypes: { value: AccountType; label: string }[] = [
   { value: 'cash', label: 'Cash' },
 ];
 
+const accountGroups: { value: AccountGroup; label: string }[] = [
+  { value: 'family', label: 'Family' },
+  { value: 'trust', label: 'Trust' },
+  { value: 'smsf', label: 'SMSF' },
+];
+
 export function AccountDialog({ open, onOpenChange, account }: AccountDialogProps) {
   const router = useRouter();
   const isEditing = !!account;
@@ -45,15 +52,46 @@ export function AccountDialog({ open, onOpenChange, account }: AccountDialogProp
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const [name, setName] = useState(account?.name || '');
-  const [accountType, setAccountType] = useState<AccountType>(account?.account_type || 'bank');
-  const [institution, setInstitution] = useState(account?.institution || '');
-  const [accountNumber, setAccountNumber] = useState(account?.account_number || '');
-  const [bsb, setBsb] = useState(account?.bsb || '');
-  const [currentBalance, setCurrentBalance] = useState(account?.current_balance?.toString() || '0');
-  const [creditLimit, setCreditLimit] = useState(account?.credit_limit?.toString() || '');
-  const [interestRate, setInterestRate] = useState(account?.interest_rate?.toString() || '');
-  const [notes, setNotes] = useState(account?.notes || '');
+  const [name, setName] = useState('');
+  const [accountType, setAccountType] = useState<AccountType>('bank');
+  const [accountGroup, setAccountGroup] = useState<AccountGroup>('family');
+  const [institution, setInstitution] = useState('');
+  const [accountNumber, setAccountNumber] = useState('');
+  const [bsb, setBsb] = useState('');
+  const [currentBalance, setCurrentBalance] = useState('0');
+  const [creditLimit, setCreditLimit] = useState('');
+  const [interestRate, setInterestRate] = useState('');
+  const [notes, setNotes] = useState('');
+
+  // Sync form state when account prop changes (for editing)
+  useEffect(() => {
+    if (account) {
+      setName(account.name || '');
+      setAccountType(account.account_type || 'bank');
+      setAccountGroup(account.account_group || 'family');
+      setInstitution(account.institution || '');
+      setAccountNumber(account.account_number || '');
+      setBsb(account.bsb || '');
+      setCurrentBalance(account.current_balance?.toString() || '0');
+      setCreditLimit(account.credit_limit?.toString() || '');
+      setInterestRate(account.interest_rate?.toString() || '');
+      setNotes(account.notes || '');
+      setError(null);
+    } else {
+      // Reset form for new account
+      setName('');
+      setAccountType('bank');
+      setAccountGroup('family');
+      setInstitution('');
+      setAccountNumber('');
+      setBsb('');
+      setCurrentBalance('0');
+      setCreditLimit('');
+      setInterestRate('');
+      setNotes('');
+      setError(null);
+    }
+  }, [account]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -63,6 +101,7 @@ export function AccountDialog({ open, onOpenChange, account }: AccountDialogProp
     const formData = {
       name,
       account_type: accountType,
+      account_group: accountGroup,
       institution: institution || undefined,
       account_number: accountNumber || undefined,
       bsb: bsb || undefined,
@@ -119,20 +158,38 @@ export function AccountDialog({ open, onOpenChange, account }: AccountDialogProp
               />
             </div>
 
-            <div className="grid gap-2">
-              <Label htmlFor="type">Account Type *</Label>
-              <Select value={accountType} onValueChange={(v) => setAccountType(v as AccountType)}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Select type" />
-                </SelectTrigger>
-                <SelectContent>
-                  {accountTypes.map((type) => (
-                    <SelectItem key={type.value} value={type.value}>
-                      {type.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="grid gap-2">
+                <Label htmlFor="type">Account Type *</Label>
+                <Select value={accountType} onValueChange={(v) => setAccountType(v as AccountType)}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select type" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {accountTypes.map((type) => (
+                      <SelectItem key={type.value} value={type.value}>
+                        {type.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="grid gap-2">
+                <Label htmlFor="group">Group *</Label>
+                <Select value={accountGroup} onValueChange={(v) => setAccountGroup(v as AccountGroup)}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select group" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {accountGroups.map((group) => (
+                      <SelectItem key={group.value} value={group.value}>
+                        {group.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
 
             <div className="grid gap-2">
@@ -170,7 +227,7 @@ export function AccountDialog({ open, onOpenChange, account }: AccountDialogProp
 
             <div className="grid gap-2">
               <Label htmlFor="balance">
-                {showCreditFields || showLoanFields ? 'Current Owing' : 'Current Balance'}
+                {showCreditFields || showLoanFields ? 'Starting Owing' : 'Starting Balance'}
               </Label>
               <div className="relative">
                 <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground">

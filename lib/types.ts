@@ -1,6 +1,7 @@
 // Database types for Moyle Family Finance App
 
 export type AccountType = 'bank' | 'credit' | 'investment' | 'loan' | 'cash';
+export type AccountGroup = 'family' | 'trust' | 'smsf';
 export type TransactionType = 'income' | 'expense' | 'transfer';
 export type CategoryType = 'income' | 'expense' | 'transfer';
 
@@ -9,11 +10,13 @@ export interface Account {
   user_id: string;
   name: string;
   account_type: AccountType;
+  account_group?: AccountGroup;
   institution: string | null;
   account_number: string | null;
   bsb: string | null;
   currency: string;
-  current_balance: number;
+  current_balance: number; // Starting balance
+  calculated_balance?: number; // Starting balance + sum of transactions (computed)
   available_balance: number | null;
   credit_limit: number | null;
   interest_rate: number | null;
@@ -26,6 +29,7 @@ export interface Account {
 export interface AccountFormData {
   name: string;
   account_type: AccountType;
+  account_group?: AccountGroup;
   institution?: string;
   account_number?: string;
   bsb?: string;
@@ -34,6 +38,16 @@ export interface AccountFormData {
   interest_rate?: number;
   notes?: string;
 }
+
+// Account group labels for UI
+export const ACCOUNT_GROUP_LABELS: Record<AccountGroup, string> = {
+  family: 'Family',
+  trust: 'Trust',
+  smsf: 'SMSF',
+};
+
+// Account group display order
+export const ACCOUNT_GROUP_ORDER: AccountGroup[] = ['family', 'trust', 'smsf'];
 
 export interface Category {
   id: string;
@@ -128,6 +142,7 @@ export interface CSVTransaction {
   date: string;
   description: string;
   amount: number;
+  payee?: string;
   balance?: number;
 }
 

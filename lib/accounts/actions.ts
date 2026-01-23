@@ -4,10 +4,14 @@ import { revalidatePath } from 'next/cache';
 import { createClient } from '@/lib/supabase/server';
 import type { Account, AccountFormData } from '@/lib/types';
 
+// Default user ID for this app (no auth)
+const DEFAULT_USER_ID = '00000000-0000-0000-0000-000000000001';
+
 export async function getAccounts(): Promise<Account[]> {
   const supabase = await createClient();
 
-  const { data, error } = await supabase
+  // Fetch accounts
+  const { data: accounts, error } = await supabase
     .from('accounts')
     .select('*')
     .order('name');
@@ -17,7 +21,40 @@ export async function getAccounts(): Promise<Account[]> {
     return [];
   }
 
-  return (data || []) as Account[];
+  if (!accounts || accounts.length === 0) {
+    return [];
+  }
+
+  // Fetch transaction sums for each account
+  // The amount in transactions is positive for income and negative for expenses
+  const accountIds = accounts.map(a => a.id);
+
+  const { data: transactionSums, error: txError } = await supabase
+    .from('transactions')
+    .select('account_id, amount')
+    .in('account_id', accountIds);
+
+  if (txError) {
+    console.error('Error fetching transaction sums:', txError);
+    // Return accounts with just starting balance if we can't get transactions
+    return accounts as Account[];
+  }
+
+  // Calculate sum per account
+  const sumByAccount: Record<string, number> = {};
+  for (const tx of transactionSums || []) {
+    if (!sumByAccount[tx.account_id]) {
+      sumByAccount[tx.account_id] = 0;
+    }
+    sumByAccount[tx.account_id] += tx.amount || 0;
+  }
+
+  // Add calculated_balance field (starting_balance + transaction sums)
+  // current_balance remains as the starting balance for editing
+  return accounts.map(account => ({
+    ...account,
+    calculated_balance: (account.current_balance || 0) + (sumByAccount[account.id] || 0),
+  })) as Account[];
 }
 
 export async function getAccount(id: string): Promise<Account | null> {
@@ -40,18 +77,13 @@ export async function getAccount(id: string): Promise<Account | null> {
 export async function createAccount(formData: AccountFormData): Promise<{ success: boolean; error?: string }> {
   const supabase = await createClient();
 
-  const { data: { user } } = await supabase.auth.getUser();
-
-  if (!user) {
-    return { success: false, error: 'Not authenticated' };
-  }
-
   const { error } = await supabase
     .from('accounts')
     .insert({
-      user_id: user.id,
+      user_id: DEFAULT_USER_ID,
       name: formData.name,
       account_type: formData.account_type,
+      account_group: formData.account_group || 'family',
       institution: formData.institution || null,
       account_number: formData.account_number || null,
       bsb: formData.bsb || null,
@@ -78,6 +110,7 @@ export async function updateAccount(id: string, formData: AccountFormData): Prom
     .update({
       name: formData.name,
       account_type: formData.account_type,
+      account_group: formData.account_group || 'family',
       institution: formData.institution || null,
       account_number: formData.account_number || null,
       bsb: formData.bsb || null,
@@ -126,10 +159,12 @@ export async function getAccountsSummary(): Promise<{
   let totalDebt = 0;
 
   for (const account of accounts) {
+    // Use calculated_balance (starting + transactions) for accurate totals
+    const balance = account.calculated_balance ?? account.current_balance;
     if (account.account_type === 'credit' || account.account_type === 'loan') {
-      totalDebt += Math.abs(account.current_balance);
+      totalDebt += Math.abs(balance);
     } else {
-      totalBalance += account.current_balance;
+      totalBalance += balance;
     }
   }
 
