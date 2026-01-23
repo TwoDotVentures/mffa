@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   Table,
@@ -35,7 +35,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { MoreHorizontal, Pencil, Trash2, Loader2, ArrowUpRight, ArrowDownLeft, ArrowRightLeft, Wand2, Search, X, Download, Tag, User, Calendar, FileText, Plus } from 'lucide-react';
+import { MoreHorizontal, Pencil, Trash2, Loader2, ArrowUpRight, ArrowDownLeft, ArrowRightLeft, Wand2, Search, X, Download, Tag, User, Calendar, FileText, Plus, ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-react';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Label } from '@/components/ui/label';
 import { TransactionDialog } from './transaction-dialog';
@@ -79,6 +79,10 @@ const typeColors = {
   expense: 'text-red-600 dark:text-red-400',
   transfer: 'text-blue-600 dark:text-blue-400',
 };
+
+// Sorting types
+type SortColumn = 'date' | 'description' | 'account' | 'category' | 'amount' | null;
+type SortDirection = 'asc' | 'desc';
 
 // Date range presets
 type DateRangePreset =
@@ -296,6 +300,28 @@ export function TransactionsList({ transactions, accounts, categories }: Transac
   // Local categories state (to update when new category is created)
   const [localCategories, setLocalCategories] = useState<Category[]>(categories);
 
+  // Sort state
+  const [sortColumn, setSortColumn] = useState<SortColumn>('date');
+  const [sortDirection, setSortDirection] = useState<SortDirection>('desc');
+
+  const handleSort = (column: SortColumn) => {
+    if (sortColumn === column) {
+      setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
+    } else {
+      setSortColumn(column);
+      setSortDirection('asc');
+    }
+  };
+
+  const SortIcon = ({ column }: { column: SortColumn }) => {
+    if (sortColumn !== column) {
+      return <ArrowUpDown className="ml-1 h-3 w-3 opacity-50" />;
+    }
+    return sortDirection === 'asc'
+      ? <ArrowUp className="ml-1 h-3 w-3" />
+      : <ArrowDown className="ml-1 h-3 w-3" />;
+  };
+
   // Filter transactions
   const filteredTransactions = transactions.filter((t) => {
     // Date range filter
@@ -334,6 +360,38 @@ export function TransactionsList({ transactions, accounts, categories }: Transac
     }
     return true;
   });
+
+  // Sort transactions
+  const sortedTransactions = useMemo(() => {
+    if (!sortColumn) return filteredTransactions;
+
+    return [...filteredTransactions].sort((a, b) => {
+      let comparison = 0;
+
+      switch (sortColumn) {
+        case 'date':
+          comparison = new Date(a.date).getTime() - new Date(b.date).getTime();
+          break;
+        case 'description':
+          comparison = (a.description || '').localeCompare(b.description || '');
+          break;
+        case 'account':
+          comparison = (a.account?.name || '').localeCompare(b.account?.name || '');
+          break;
+        case 'category':
+          comparison = (a.category?.name || '').localeCompare(b.category?.name || '');
+          break;
+        case 'amount':
+          // Amounts are stored as positive, use transaction_type to determine sign
+          const aAmount = a.transaction_type === 'expense' ? -a.amount : a.amount;
+          const bAmount = b.transaction_type === 'expense' ? -b.amount : b.amount;
+          comparison = aAmount - bAmount;
+          break;
+      }
+
+      return sortDirection === 'asc' ? comparison : -comparison;
+    });
+  }, [filteredTransactions, sortColumn, sortDirection]);
 
   const allSelected = filteredTransactions.length > 0 && selectedIds.size === filteredTransactions.length;
   const someSelected = selectedIds.size > 0 && selectedIds.size < filteredTransactions.length;
@@ -872,16 +930,56 @@ export function TransactionsList({ transactions, accounts, categories }: Transac
                 aria-label="Select all"
               />
             </TableHead>
-            <TableHead className="w-[100px]">Date</TableHead>
-            <TableHead>Description</TableHead>
-            <TableHead>Account</TableHead>
-            <TableHead>Category</TableHead>
-            <TableHead className="text-right">Amount</TableHead>
+            <TableHead
+              className="w-[100px] cursor-pointer hover:bg-muted/50 select-none"
+              onClick={() => handleSort('date')}
+            >
+              <div className="flex items-center">
+                Date
+                <SortIcon column="date" />
+              </div>
+            </TableHead>
+            <TableHead
+              className="cursor-pointer hover:bg-muted/50 select-none"
+              onClick={() => handleSort('description')}
+            >
+              <div className="flex items-center">
+                Description
+                <SortIcon column="description" />
+              </div>
+            </TableHead>
+            <TableHead
+              className="cursor-pointer hover:bg-muted/50 select-none"
+              onClick={() => handleSort('account')}
+            >
+              <div className="flex items-center">
+                Account
+                <SortIcon column="account" />
+              </div>
+            </TableHead>
+            <TableHead
+              className="cursor-pointer hover:bg-muted/50 select-none"
+              onClick={() => handleSort('category')}
+            >
+              <div className="flex items-center">
+                Category
+                <SortIcon column="category" />
+              </div>
+            </TableHead>
+            <TableHead
+              className="text-right cursor-pointer hover:bg-muted/50 select-none"
+              onClick={() => handleSort('amount')}
+            >
+              <div className="flex items-center justify-end">
+                Amount
+                <SortIcon column="amount" />
+              </div>
+            </TableHead>
             <TableHead className="w-[50px]"></TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
-          {filteredTransactions.map((transaction) => {
+          {sortedTransactions.map((transaction) => {
             const TypeIcon = typeIcons[transaction.transaction_type];
             const isExpense = transaction.transaction_type === 'expense';
             const isSelected = selectedIds.has(transaction.id);

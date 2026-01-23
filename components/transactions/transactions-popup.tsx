@@ -1,5 +1,6 @@
 'use client';
 
+import { useState, useMemo } from 'react';
 import {
   Dialog,
   DialogContent,
@@ -15,8 +16,11 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
-import { ArrowUpRight, ArrowDownLeft, ArrowRightLeft } from 'lucide-react';
+import { ArrowUpRight, ArrowDownLeft, ArrowRightLeft, ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-react';
 import type { Transaction } from '@/lib/types';
+
+type SortColumn = 'date' | 'description' | 'amount' | null;
+type SortDirection = 'asc' | 'desc';
 
 interface TransactionsPopupProps {
   open: boolean;
@@ -59,11 +63,57 @@ export function TransactionsPopup({
   title,
   transactions,
 }: TransactionsPopupProps) {
+  const [sortColumn, setSortColumn] = useState<SortColumn>(null);
+  const [sortDirection, setSortDirection] = useState<SortDirection>('asc');
+
+  const handleSort = (column: SortColumn) => {
+    if (sortColumn === column) {
+      setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
+    } else {
+      setSortColumn(column);
+      setSortDirection('asc');
+    }
+  };
+
+  const sortedTransactions = useMemo(() => {
+    if (!sortColumn) return transactions;
+
+    return [...transactions].sort((a, b) => {
+      let comparison = 0;
+
+      switch (sortColumn) {
+        case 'date':
+          comparison = new Date(a.date).getTime() - new Date(b.date).getTime();
+          break;
+        case 'description':
+          comparison = (a.description || '').localeCompare(b.description || '');
+          break;
+        case 'amount':
+          // Amounts are stored as positive, use transaction_type to determine sign
+          const aAmount = a.transaction_type === 'expense' ? -a.amount : a.amount;
+          const bAmount = b.transaction_type === 'expense' ? -b.amount : b.amount;
+          comparison = aAmount - bAmount;
+          break;
+      }
+
+      return sortDirection === 'asc' ? comparison : -comparison;
+    });
+  }, [transactions, sortColumn, sortDirection]);
+
+  const SortIcon = ({ column }: { column: SortColumn }) => {
+    if (sortColumn !== column) {
+      return <ArrowUpDown className="ml-1 h-3 w-3 opacity-50" />;
+    }
+    return sortDirection === 'asc'
+      ? <ArrowUp className="ml-1 h-3 w-3" />
+      : <ArrowDown className="ml-1 h-3 w-3" />;
+  };
+
   const total = transactions.reduce((sum, t) => sum + t.amount, 0);
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-3xl max-h-[80vh] overflow-hidden flex flex-col">
+      <DialogContent className="sm:max-w-[1152px] max-h-[80vh] overflow-hidden flex flex-col">
         <DialogHeader>
           <DialogTitle className="flex items-center justify-between pr-8">
             <span>{title}</span>
@@ -79,15 +129,39 @@ export function TransactionsPopup({
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead className="w-[100px]">Date</TableHead>
-                  <TableHead>Description</TableHead>
+                  <TableHead
+                    className="w-[100px] cursor-pointer hover:bg-muted/50 select-none"
+                    onClick={() => handleSort('date')}
+                  >
+                    <div className="flex items-center">
+                      Date
+                      <SortIcon column="date" />
+                    </div>
+                  </TableHead>
+                  <TableHead
+                    className="cursor-pointer hover:bg-muted/50 select-none"
+                    onClick={() => handleSort('description')}
+                  >
+                    <div className="flex items-center">
+                      Description
+                      <SortIcon column="description" />
+                    </div>
+                  </TableHead>
+                  <TableHead
+                    className="text-right cursor-pointer hover:bg-muted/50 select-none"
+                    onClick={() => handleSort('amount')}
+                  >
+                    <div className="flex items-center justify-end">
+                      Amount
+                      <SortIcon column="amount" />
+                    </div>
+                  </TableHead>
                   <TableHead>Account</TableHead>
                   <TableHead>Category</TableHead>
-                  <TableHead className="text-right">Amount</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {transactions.map((transaction) => {
+                {sortedTransactions.map((transaction) => {
                   const TypeIcon = typeIcons[transaction.transaction_type];
                   const isExpense = transaction.transaction_type === 'expense';
 
@@ -113,6 +187,16 @@ export function TransactionsPopup({
                           </div>
                         </div>
                       </TableCell>
+                      <TableCell
+                        className={`text-right font-medium text-sm ${
+                          isExpense
+                            ? 'text-red-600 dark:text-red-400'
+                            : 'text-green-600 dark:text-green-400'
+                        }`}
+                      >
+                        {isExpense ? '-' : '+'}
+                        {formatCurrency(Math.abs(transaction.amount))}
+                      </TableCell>
                       <TableCell className="text-muted-foreground text-sm">
                         {transaction.account?.name || '—'}
                       </TableCell>
@@ -124,16 +208,6 @@ export function TransactionsPopup({
                         ) : (
                           <span className="text-muted-foreground">—</span>
                         )}
-                      </TableCell>
-                      <TableCell
-                        className={`text-right font-medium text-sm ${
-                          isExpense
-                            ? 'text-red-600 dark:text-red-400'
-                            : 'text-green-600 dark:text-green-400'
-                        }`}
-                      >
-                        {isExpense ? '-' : '+'}
-                        {formatCurrency(Math.abs(transaction.amount))}
                       </TableCell>
                     </TableRow>
                   );
