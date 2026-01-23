@@ -10,56 +10,73 @@ const DEFAULT_USER_ID = '00000000-0000-0000-0000-000000000001';
 export async function getTransactions(filters?: TransactionFilters): Promise<Transaction[]> {
   const supabase = await createClient();
 
-  let query = supabase
-    .from('transactions')
-    .select(`
-      *,
-      account:accounts!transactions_account_id_fkey(*),
-      category:categories(*)
-    `)
-    .order('date', { ascending: false })
-    .order('created_at', { ascending: false });
+  // Fetch transactions in batches to overcome Supabase's 1000 row limit
+  const BATCH_SIZE = 1000;
+  let allTransactions: Transaction[] = [];
+  let offset = 0;
+  let hasMore = true;
 
-  if (filters?.accountId) {
-    query = query.eq('account_id', filters.accountId);
+  while (hasMore) {
+    let query = supabase
+      .from('transactions')
+      .select(`
+        *,
+        account:accounts!transactions_account_id_fkey(*),
+        category:categories(*)
+      `)
+      .order('date', { ascending: false })
+      .order('created_at', { ascending: false })
+      .range(offset, offset + BATCH_SIZE - 1);
+
+    if (filters?.accountId) {
+      query = query.eq('account_id', filters.accountId);
+    }
+
+    if (filters?.categoryId) {
+      query = query.eq('category_id', filters.categoryId);
+    }
+
+    if (filters?.transactionType) {
+      query = query.eq('transaction_type', filters.transactionType);
+    }
+
+    if (filters?.dateFrom) {
+      query = query.gte('date', filters.dateFrom);
+    }
+
+    if (filters?.dateTo) {
+      query = query.lte('date', filters.dateTo);
+    }
+
+    if (filters?.search) {
+      query = query.or(`description.ilike.%${filters.search}%,payee.ilike.%${filters.search}%`);
+    }
+
+    if (filters?.minAmount !== undefined) {
+      query = query.gte('amount', Math.abs(filters.minAmount));
+    }
+
+    if (filters?.maxAmount !== undefined) {
+      query = query.lte('amount', Math.abs(filters.maxAmount));
+    }
+
+    const { data, error } = await query;
+
+    if (error) {
+      console.error('Error fetching transactions:', error);
+      break;
+    }
+
+    if (data && data.length > 0) {
+      allTransactions = [...allTransactions, ...(data as unknown as Transaction[])];
+      offset += BATCH_SIZE;
+      hasMore = data.length === BATCH_SIZE;
+    } else {
+      hasMore = false;
+    }
   }
 
-  if (filters?.categoryId) {
-    query = query.eq('category_id', filters.categoryId);
-  }
-
-  if (filters?.transactionType) {
-    query = query.eq('transaction_type', filters.transactionType);
-  }
-
-  if (filters?.dateFrom) {
-    query = query.gte('date', filters.dateFrom);
-  }
-
-  if (filters?.dateTo) {
-    query = query.lte('date', filters.dateTo);
-  }
-
-  if (filters?.search) {
-    query = query.or(`description.ilike.%${filters.search}%,payee.ilike.%${filters.search}%`);
-  }
-
-  if (filters?.minAmount !== undefined) {
-    query = query.gte('amount', Math.abs(filters.minAmount));
-  }
-
-  if (filters?.maxAmount !== undefined) {
-    query = query.lte('amount', Math.abs(filters.maxAmount));
-  }
-
-  const { data, error } = await query;
-
-  if (error) {
-    console.error('Error fetching transactions:', error);
-    return [];
-  }
-
-  return (data || []) as unknown as Transaction[];
+  return allTransactions;
 }
 
 export async function getTransaction(id: string): Promise<Transaction | null> {
@@ -173,40 +190,178 @@ export async function deleteTransactions(ids: string[]): Promise<{ success: bool
 
   const supabase = await createClient();
 
-  const { error, count } = await supabase
-    .from('transactions')
-    .delete()
-    .in('id', ids);
+  // Batch deletes to avoid "Bad Request" errors with large .in() queries
+  const BATCH_SIZE = 100;
+  let totalDeleted = 0;
 
-  if (error) {
-    console.error('Error deleting transactions:', error);
-    return { success: false, deleted: 0, error: error.message };
+  for (let i = 0; i < ids.length; i += BATCH_SIZE) {
+    const batch = ids.slice(i, i + BATCH_SIZE);
+
+    const { error } = await supabase
+      .from('transactions')
+      .delete()
+      .in('id', batch);
+
+    if (error) {
+      console.error('Error deleting transactions batch:', error);
+      return { success: false, deleted: totalDeleted, error: error.message };
+    }
+
+    totalDeleted += batch.length;
   }
 
   revalidatePath('/transactions');
   revalidatePath('/accounts');
   revalidatePath('/dashboard');
-  return { success: true, deleted: count || ids.length };
+  return { success: true, deleted: totalDeleted };
+}
+
+export async function updateTransactionsPayee(ids: string[], payee: string): Promise<{ success: boolean; updated: number; error?: string }> {
+  if (ids.length === 0) {
+    return { success: false, updated: 0, error: 'No transactions selected' };
+  }
+
+  const supabase = await createClient();
+
+  // Batch updates to avoid "Bad Request" errors with large .in() queries
+  const BATCH_SIZE = 100;
+  let totalUpdated = 0;
+
+  for (let i = 0; i < ids.length; i += BATCH_SIZE) {
+    const batch = ids.slice(i, i + BATCH_SIZE);
+
+    const { error } = await supabase
+      .from('transactions')
+      .update({ payee: payee || null })
+      .in('id', batch);
+
+    if (error) {
+      console.error('Error updating transactions payee:', error);
+      return { success: false, updated: totalUpdated, error: error.message };
+    }
+
+    totalUpdated += batch.length;
+  }
+
+  revalidatePath('/transactions');
+  revalidatePath('/accounts');
+  revalidatePath('/dashboard');
+  return { success: true, updated: totalUpdated };
+}
+
+export async function updateTransactionsDescription(ids: string[], description: string): Promise<{ success: boolean; updated: number; error?: string }> {
+  if (ids.length === 0) {
+    return { success: false, updated: 0, error: 'No transactions selected' };
+  }
+
+  const supabase = await createClient();
+
+  // Batch updates to avoid "Bad Request" errors with large .in() queries
+  const BATCH_SIZE = 100;
+  let totalUpdated = 0;
+
+  for (let i = 0; i < ids.length; i += BATCH_SIZE) {
+    const batch = ids.slice(i, i + BATCH_SIZE);
+
+    const { error } = await supabase
+      .from('transactions')
+      .update({ description })
+      .in('id', batch);
+
+    if (error) {
+      console.error('Error updating transactions description:', error);
+      return { success: false, updated: totalUpdated, error: error.message };
+    }
+
+    totalUpdated += batch.length;
+  }
+
+  revalidatePath('/transactions');
+  revalidatePath('/accounts');
+  revalidatePath('/dashboard');
+  return { success: true, updated: totalUpdated };
+}
+
+export async function updateTransactionCategory(id: string, categoryId: string | null): Promise<{ success: boolean; error?: string }> {
+  const supabase = await createClient();
+
+  const { error } = await supabase
+    .from('transactions')
+    .update({ category_id: categoryId })
+    .eq('id', id);
+
+  if (error) {
+    console.error('Error updating transaction category:', error);
+    return { success: false, error: error.message };
+  }
+
+  revalidatePath('/transactions');
+  revalidatePath('/accounts');
+  revalidatePath('/dashboard');
+  return { success: true };
+}
+
+export async function updateTransactionsCategory(ids: string[], categoryId: string | null): Promise<{ success: boolean; updated: number; error?: string }> {
+  if (ids.length === 0) {
+    return { success: false, updated: 0, error: 'No transactions selected' };
+  }
+
+  const supabase = await createClient();
+
+  // Batch updates to avoid "Bad Request" errors with large .in() queries
+  const BATCH_SIZE = 100;
+  let totalUpdated = 0;
+
+  for (let i = 0; i < ids.length; i += BATCH_SIZE) {
+    const batch = ids.slice(i, i + BATCH_SIZE);
+
+    const { error } = await supabase
+      .from('transactions')
+      .update({ category_id: categoryId })
+      .in('id', batch);
+
+    if (error) {
+      console.error('Error updating transactions category:', error);
+      return { success: false, updated: totalUpdated, error: error.message };
+    }
+
+    totalUpdated += batch.length;
+  }
+
+  revalidatePath('/transactions');
+  revalidatePath('/accounts');
+  revalidatePath('/dashboard');
+  return { success: true, updated: totalUpdated };
 }
 
 export async function importTransactions(
   accountId: string,
-  transactions: CSVTransaction[]
+  transactions: CSVTransaction[],
+  categoryMap?: Record<string, string> // CSV category name -> category ID
 ): Promise<{ success: boolean; imported: number; error?: string }> {
   const supabase = await createClient();
 
   const importId = `import_${Date.now()}`;
 
-  const transactionsToInsert = transactions.map((t) => ({
-    user_id: DEFAULT_USER_ID,
-    account_id: accountId,
-    date: t.date,
-    description: t.description,
-    amount: Math.abs(t.amount),
-    transaction_type: t.amount >= 0 ? 'income' : 'expense' as const,
-    payee: t.payee || null,
-    import_id: importId,
-  }));
+  const transactionsToInsert = transactions.map((t) => {
+    // Look up category ID from the mapping if category exists
+    let categoryId: string | null = null;
+    if (t.category && categoryMap && categoryMap[t.category]) {
+      categoryId = categoryMap[t.category];
+    }
+
+    return {
+      user_id: DEFAULT_USER_ID,
+      account_id: accountId,
+      date: t.date,
+      description: t.description,
+      amount: Math.abs(t.amount),
+      transaction_type: t.amount >= 0 ? 'income' : 'expense' as const,
+      payee: t.payee || null,
+      category_id: categoryId,
+      import_id: importId,
+    };
+  });
 
   const { data: insertedTransactions, error } = await supabase
     .from('transactions')
@@ -218,7 +373,7 @@ export async function importTransactions(
     return { success: false, imported: 0, error: error.message };
   }
 
-  // Automatically apply categorisation rules to the imported transactions
+  // Automatically apply categorisation rules to transactions without categories
   if (insertedTransactions && insertedTransactions.length > 0) {
     const transactionIds = insertedTransactions.map((t) => t.id);
     await applyCategorisationRules(transactionIds);
@@ -228,6 +383,39 @@ export async function importTransactions(
   revalidatePath('/accounts');
   revalidatePath('/dashboard');
   return { success: true, imported: transactions.length };
+}
+
+// Create multiple categories at once
+export async function createCategories(
+  categories: { name: string; categoryType: 'income' | 'expense' | 'transfer' }[]
+): Promise<{ success: boolean; created: Record<string, string>; error?: string }> {
+  const supabase = await createClient();
+
+  const created: Record<string, string> = {};
+
+  for (const cat of categories) {
+    const { data, error } = await supabase
+      .from('categories')
+      .insert({
+        user_id: DEFAULT_USER_ID,
+        name: cat.name,
+        category_type: cat.categoryType,
+      })
+      .select('id')
+      .single();
+
+    if (error) {
+      console.error('Error creating category:', error);
+      return { success: false, created, error: error.message };
+    }
+
+    if (data) {
+      created[cat.name] = data.id;
+    }
+  }
+
+  revalidatePath('/transactions');
+  return { success: true, created };
 }
 
 // Categories

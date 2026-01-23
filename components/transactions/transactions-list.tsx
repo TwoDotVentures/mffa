@@ -35,10 +35,14 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { MoreHorizontal, Pencil, Trash2, Loader2, ArrowUpRight, ArrowDownLeft, ArrowRightLeft, Wand2, Search, X } from 'lucide-react';
+import { MoreHorizontal, Pencil, Trash2, Loader2, ArrowUpRight, ArrowDownLeft, ArrowRightLeft, Wand2, Search, X, Download, Tag, User, Calendar, FileText } from 'lucide-react';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { Label } from '@/components/ui/label';
 import { TransactionDialog } from './transaction-dialog';
 import { CreateRuleDialog } from './create-rule-dialog';
-import { deleteTransaction, deleteTransactions } from '@/lib/transactions/actions';
+import { TopCategoriesChart } from './top-categories-chart';
+import { TopPayeesChart } from './top-payees-chart';
+import { deleteTransaction, deleteTransactions, updateTransactionsPayee, updateTransactionsCategory, updateTransactionCategory, updateTransactionsDescription } from '@/lib/transactions/actions';
 import { toast } from 'sonner';
 import type { Transaction, Account, Category } from '@/lib/types';
 
@@ -76,6 +80,166 @@ const typeColors = {
   transfer: 'text-blue-600 dark:text-blue-400',
 };
 
+// Date range presets
+type DateRangePreset =
+  | 'all'
+  | 'this-fy'
+  | 'last-fy'
+  | 'this-quarter'
+  | 'last-quarter'
+  | 'this-month'
+  | 'last-month'
+  | 'last-30-days'
+  | 'last-90-days'
+  | 'this-year'
+  | 'last-year'
+  | 'custom';
+
+const DATE_RANGE_LABELS: Record<DateRangePreset, string> = {
+  'all': 'All Time',
+  'this-fy': 'This Financial Year',
+  'last-fy': 'Last Financial Year',
+  'this-quarter': 'This Quarter',
+  'last-quarter': 'Last Quarter',
+  'this-month': 'This Month',
+  'last-month': 'Last Month',
+  'last-30-days': 'Last 30 Days',
+  'last-90-days': 'Last 90 Days',
+  'this-year': 'This Calendar Year',
+  'last-year': 'Last Calendar Year',
+  'custom': 'Custom Range',
+};
+
+// Australian Financial Year: July 1 - June 30
+function getFinancialYearDates(offset: number = 0): { from: string; to: string } {
+  const now = new Date();
+  let fyStartYear = now.getFullYear();
+
+  // If before July, we're in the FY that started last year
+  if (now.getMonth() < 6) {
+    fyStartYear -= 1;
+  }
+
+  // Apply offset (0 = current FY, -1 = last FY)
+  fyStartYear += offset;
+
+  const from = new Date(fyStartYear, 6, 1); // July 1
+  const to = new Date(fyStartYear + 1, 5, 30); // June 30 next year
+
+  return {
+    from: from.toISOString().split('T')[0],
+    to: to.toISOString().split('T')[0],
+  };
+}
+
+function getQuarterDates(offset: number = 0): { from: string; to: string } {
+  const now = new Date();
+  const currentQuarter = Math.floor(now.getMonth() / 3);
+  const targetQuarter = currentQuarter + offset;
+
+  let year = now.getFullYear();
+  let quarter = targetQuarter;
+
+  // Handle year wrapping
+  while (quarter < 0) {
+    quarter += 4;
+    year -= 1;
+  }
+  while (quarter > 3) {
+    quarter -= 4;
+    year += 1;
+  }
+
+  const from = new Date(year, quarter * 3, 1);
+  const to = new Date(year, quarter * 3 + 3, 0); // Last day of quarter
+
+  return {
+    from: from.toISOString().split('T')[0],
+    to: to.toISOString().split('T')[0],
+  };
+}
+
+function getMonthDates(offset: number = 0): { from: string; to: string } {
+  const now = new Date();
+  const targetDate = new Date(now.getFullYear(), now.getMonth() + offset, 1);
+
+  const from = new Date(targetDate.getFullYear(), targetDate.getMonth(), 1);
+  const to = new Date(targetDate.getFullYear(), targetDate.getMonth() + 1, 0);
+
+  return {
+    from: from.toISOString().split('T')[0],
+    to: to.toISOString().split('T')[0],
+  };
+}
+
+function getLastNDays(days: number): { from: string; to: string } {
+  const now = new Date();
+  const from = new Date(now);
+  from.setDate(from.getDate() - days);
+
+  return {
+    from: from.toISOString().split('T')[0],
+    to: now.toISOString().split('T')[0],
+  };
+}
+
+function getCalendarYearDates(offset: number = 0): { from: string; to: string } {
+  const now = new Date();
+  const year = now.getFullYear() + offset;
+
+  return {
+    from: `${year}-01-01`,
+    to: `${year}-12-31`,
+  };
+}
+
+function getDateRangeForPreset(preset: DateRangePreset): { from: string | null; to: string | null } {
+  switch (preset) {
+    case 'all':
+      return { from: null, to: null };
+    case 'this-fy':
+      return getFinancialYearDates(0);
+    case 'last-fy':
+      return getFinancialYearDates(-1);
+    case 'this-quarter':
+      return getQuarterDates(0);
+    case 'last-quarter':
+      return getQuarterDates(-1);
+    case 'this-month':
+      return getMonthDates(0);
+    case 'last-month':
+      return getMonthDates(-1);
+    case 'last-30-days':
+      return getLastNDays(30);
+    case 'last-90-days':
+      return getLastNDays(90);
+    case 'this-year':
+      return getCalendarYearDates(0);
+    case 'last-year':
+      return getCalendarYearDates(-1);
+    case 'custom':
+      return { from: null, to: null };
+    default:
+      return { from: null, to: null };
+  }
+}
+
+function formatDateRange(from: string | null, to: string | null): string {
+  if (!from && !to) return 'All Time';
+
+  const formatShort = (dateStr: string) => {
+    const date = new Date(dateStr);
+    return date.toLocaleDateString('en-AU', { day: 'numeric', month: 'short', year: 'numeric' });
+  };
+
+  if (from && to) {
+    return `${formatShort(from)} - ${formatShort(to)}`;
+  }
+  if (from) return `From ${formatShort(from)}`;
+  if (to) return `Until ${formatShort(to)}`;
+  return 'All Time';
+}
+
 export function TransactionsList({ transactions, accounts, categories }: TransactionsListProps) {
   const router = useRouter();
   const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(null);
@@ -87,13 +251,48 @@ export function TransactionsList({ transactions, accounts, categories }: Transac
   const [accountFilter, setAccountFilter] = useState<string>('all');
   const [searchTerm, setSearchTerm] = useState('');
 
+  // Date range state - default to current financial year
+  const [dateRangePreset, setDateRangePreset] = useState<DateRangePreset>('this-fy');
+  const [customDateFrom, setCustomDateFrom] = useState<string>('');
+  const [customDateTo, setCustomDateTo] = useState<string>('');
+  const [datePickerOpen, setDatePickerOpen] = useState(false);
+
+  // Calculate effective date range
+  const effectiveDateRange = dateRangePreset === 'custom'
+    ? { from: customDateFrom || null, to: customDateTo || null }
+    : getDateRangeForPreset(dateRangePreset);
+
   // Selection state
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
   const [bulkDeleteLoading, setBulkDeleteLoading] = useState(false);
 
+  // Bulk edit state
+  const [bulkPayeeOpen, setBulkPayeeOpen] = useState(false);
+  const [bulkPayeeValue, setBulkPayeeValue] = useState('');
+  const [bulkPayeeLoading, setBulkPayeeLoading] = useState(false);
+  const [bulkCategoryOpen, setBulkCategoryOpen] = useState(false);
+  const [bulkCategoryValue, setBulkCategoryValue] = useState('');
+  const [bulkCategoryLoading, setBulkCategoryLoading] = useState(false);
+  const [bulkCategorySearch, setBulkCategorySearch] = useState('');
+  const [bulkDescriptionOpen, setBulkDescriptionOpen] = useState(false);
+  const [bulkDescriptionValue, setBulkDescriptionValue] = useState('');
+  const [bulkDescriptionLoading, setBulkDescriptionLoading] = useState(false);
+
+  // Inline category edit state
+  const [editingCategoryId, setEditingCategoryId] = useState<string | null>(null);
+  const [inlineCategoryLoading, setInlineCategoryLoading] = useState<string | null>(null);
+  const [inlineCategorySearch, setInlineCategorySearch] = useState('');
+
   // Filter transactions
   const filteredTransactions = transactions.filter((t) => {
+    // Date range filter
+    if (effectiveDateRange.from && t.date < effectiveDateRange.from) {
+      return false;
+    }
+    if (effectiveDateRange.to && t.date > effectiveDateRange.to) {
+      return false;
+    }
     // Account filter
     if (accountFilter !== 'all' && t.account_id !== accountFilter) {
       return false;
@@ -170,14 +369,136 @@ export function TransactionsList({ transactions, accounts, categories }: Transac
     setBulkDeleteLoading(false);
   };
 
+  const handleBulkPayeeUpdate = async () => {
+    if (selectedIds.size === 0) return;
+
+    setBulkPayeeLoading(true);
+    const result = await updateTransactionsPayee(Array.from(selectedIds), bulkPayeeValue);
+
+    if (result.success) {
+      toast.success(`Updated payee for ${result.updated} transactions`);
+      setSelectedIds(new Set());
+      setBulkPayeeOpen(false);
+      setBulkPayeeValue('');
+      router.refresh();
+    } else {
+      toast.error(result.error || 'Failed to update payee');
+    }
+
+    setBulkPayeeLoading(false);
+  };
+
+  const handleBulkCategoryUpdate = async () => {
+    if (selectedIds.size === 0) return;
+
+    setBulkCategoryLoading(true);
+    const categoryId = bulkCategoryValue === 'none' ? null : bulkCategoryValue;
+    const result = await updateTransactionsCategory(Array.from(selectedIds), categoryId);
+
+    if (result.success) {
+      toast.success(`Updated category for ${result.updated} transactions`);
+      setSelectedIds(new Set());
+      setBulkCategoryOpen(false);
+      setBulkCategoryValue('');
+      router.refresh();
+    } else {
+      toast.error(result.error || 'Failed to update category');
+    }
+
+    setBulkCategoryLoading(false);
+  };
+
+  const handleBulkDescriptionUpdate = async () => {
+    if (selectedIds.size === 0) return;
+
+    setBulkDescriptionLoading(true);
+    const result = await updateTransactionsDescription(Array.from(selectedIds), bulkDescriptionValue);
+
+    if (result.success) {
+      toast.success(`Updated description for ${result.updated} transactions`);
+      setSelectedIds(new Set());
+      setBulkDescriptionOpen(false);
+      setBulkDescriptionValue('');
+      router.refresh();
+    } else {
+      toast.error(result.error || 'Failed to update description');
+    }
+
+    setBulkDescriptionLoading(false);
+  };
+
+  // Inline category update handler
+  const handleInlineCategoryUpdate = async (transactionId: string, categoryId: string | null) => {
+    setInlineCategoryLoading(transactionId);
+    setEditingCategoryId(null);
+
+    const result = await updateTransactionCategory(transactionId, categoryId);
+
+    if (result.success) {
+      toast.success('Category updated');
+      router.refresh();
+    } else {
+      toast.error(result.error || 'Failed to update category');
+    }
+
+    setInlineCategoryLoading(null);
+  };
+
   // Clear selection when filters change
   const clearFilters = () => {
     setAccountFilter('all');
     setSearchTerm('');
+    setDateRangePreset('this-fy');
+    setCustomDateFrom('');
+    setCustomDateTo('');
     setSelectedIds(new Set());
   };
 
-  const hasActiveFilters = accountFilter !== 'all' || searchTerm !== '';
+  const hasActiveFilters = accountFilter !== 'all' || searchTerm !== '' || dateRangePreset !== 'this-fy';
+
+  // Handle preset change
+  const handlePresetChange = (preset: DateRangePreset) => {
+    setDateRangePreset(preset);
+    if (preset !== 'custom') {
+      setDatePickerOpen(false);
+    }
+  };
+
+  // Export to CSV function
+  const exportToCSV = () => {
+    // CSV header
+    const headers = ['Date', 'Description', 'Payee', 'Account', 'Category', 'Type', 'Amount'];
+
+    // CSV rows
+    const rows = filteredTransactions.map((t) => {
+      const amount = t.transaction_type === 'expense' ? -t.amount : t.amount;
+      return [
+        t.date,
+        `"${(t.description || '').replace(/"/g, '""')}"`, // Escape quotes
+        `"${(t.payee || '').replace(/"/g, '""')}"`,
+        `"${(t.account?.name || '').replace(/"/g, '""')}"`,
+        `"${(t.category?.name || '').replace(/"/g, '""')}"`,
+        t.transaction_type,
+        amount.toFixed(2),
+      ].join(',');
+    });
+
+    // Combine header and rows
+    const csv = [headers.join(','), ...rows].join('\n');
+
+    // Create and download file
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement('a');
+    const url = URL.createObjectURL(blob);
+    link.setAttribute('href', url);
+    link.setAttribute('download', `transactions_${new Date().toISOString().split('T')[0]}.csv`);
+    link.style.visibility = 'hidden';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+
+    toast.success(`Exported ${filteredTransactions.length} transactions`);
+  };
 
   if (transactions.length === 0) {
     return (
@@ -200,8 +521,17 @@ export function TransactionsList({ transactions, accounts, categories }: Transac
             placeholder="Search transactions..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
-            className="pl-9"
+            className="pl-9 pr-8"
           />
+          {searchTerm && (
+            <button
+              onClick={() => setSearchTerm('')}
+              className="absolute right-2 top-1/2 -translate-y-1/2 p-1 rounded-full hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
+              aria-label="Clear search"
+            >
+              <X className="h-3.5 w-3.5" />
+            </button>
+          )}
         </div>
         <Select value={accountFilter} onValueChange={setAccountFilter}>
           <SelectTrigger className="w-full sm:w-[200px]">
@@ -216,20 +546,106 @@ export function TransactionsList({ transactions, accounts, categories }: Transac
             ))}
           </SelectContent>
         </Select>
+
+        {/* Date Range Filter */}
+        <Popover open={datePickerOpen} onOpenChange={setDatePickerOpen}>
+          <PopoverTrigger asChild>
+            <Button variant="outline" className="w-full sm:w-auto justify-start text-left font-normal">
+              <Calendar className="mr-2 h-4 w-4" />
+              <span className="truncate">
+                {dateRangePreset === 'custom'
+                  ? formatDateRange(customDateFrom || null, customDateTo || null)
+                  : DATE_RANGE_LABELS[dateRangePreset]}
+              </span>
+            </Button>
+          </PopoverTrigger>
+          <PopoverContent className="w-auto p-0" align="start">
+            <div className="p-2 space-y-2">
+              <div className="grid gap-1">
+                {(['this-fy', 'last-fy', 'this-quarter', 'last-quarter', 'this-month', 'last-month', 'last-30-days', 'last-90-days', 'this-year', 'last-year', 'all'] as DateRangePreset[]).map((preset) => (
+                  <Button
+                    key={preset}
+                    variant={dateRangePreset === preset ? 'secondary' : 'ghost'}
+                    className="justify-start h-8 px-2"
+                    onClick={() => handlePresetChange(preset)}
+                  >
+                    {DATE_RANGE_LABELS[preset]}
+                  </Button>
+                ))}
+              </div>
+              <div className="border-t pt-2">
+                <Button
+                  variant={dateRangePreset === 'custom' ? 'secondary' : 'ghost'}
+                  className="justify-start w-full h-8 px-2 mb-2"
+                  onClick={() => setDateRangePreset('custom')}
+                >
+                  Custom Range
+                </Button>
+                {dateRangePreset === 'custom' && (
+                  <div className="space-y-2 px-1">
+                    <div className="grid gap-1">
+                      <Label className="text-xs">From</Label>
+                      <Input
+                        type="date"
+                        value={customDateFrom}
+                        onChange={(e) => setCustomDateFrom(e.target.value)}
+                        className="h-8"
+                      />
+                    </div>
+                    <div className="grid gap-1">
+                      <Label className="text-xs">To</Label>
+                      <Input
+                        type="date"
+                        value={customDateTo}
+                        onChange={(e) => setCustomDateTo(e.target.value)}
+                        className="h-8"
+                      />
+                    </div>
+                    <Button
+                      size="sm"
+                      className="w-full mt-2"
+                      onClick={() => setDatePickerOpen(false)}
+                    >
+                      Apply
+                    </Button>
+                  </div>
+                )}
+              </div>
+            </div>
+          </PopoverContent>
+        </Popover>
+
         {hasActiveFilters && (
           <Button variant="ghost" size="sm" onClick={clearFilters}>
             <X className="mr-1 h-4 w-4" />
             Clear
           </Button>
         )}
+        <Button variant="outline" size="sm" onClick={exportToCSV} disabled={filteredTransactions.length === 0}>
+          <Download className="mr-1 h-4 w-4" />
+          Export
+        </Button>
       </div>
 
       {/* Filter Results Info */}
-      {hasActiveFilters && (
-        <div className="mb-4 text-sm text-muted-foreground">
-          Showing {filteredTransactions.length} of {transactions.length} transactions
-        </div>
-      )}
+      <div className="mb-4 text-sm text-muted-foreground">
+        <span className="font-medium text-foreground">{filteredTransactions.length}</span>
+        {filteredTransactions.length !== transactions.length && (
+          <span> of {transactions.length}</span>
+        )}
+        {' '}transaction{filteredTransactions.length !== 1 ? 's' : ''}
+        {effectiveDateRange.from || effectiveDateRange.to ? (
+          <span className="ml-1">
+            ({formatDateRange(effectiveDateRange.from, effectiveDateRange.to)})
+          </span>
+        ) : null}
+      </div>
+
+      {/* Chart Cards */}
+      <div className="mb-4 grid gap-4 md:grid-cols-2">
+        <TopCategoriesChart transactions={filteredTransactions} />
+        <TopPayeesChart transactions={filteredTransactions} />
+      </div>
 
       {/* No Results Message */}
       {hasActiveFilters && filteredTransactions.length === 0 && (
@@ -256,6 +672,30 @@ export function TransactionsList({ transactions, accounts, categories }: Transac
               onClick={() => setSelectedIds(new Set())}
             >
               Clear Selection
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setBulkPayeeOpen(true)}
+            >
+              <User className="mr-2 h-4 w-4" />
+              Edit Payee
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setBulkCategoryOpen(true)}
+            >
+              <Tag className="mr-2 h-4 w-4" />
+              Edit Category
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setBulkDescriptionOpen(true)}
+            >
+              <FileText className="mr-2 h-4 w-4" />
+              Edit Description
             </Button>
             <Button
               variant="destructive"
@@ -328,10 +768,78 @@ export function TransactionsList({ transactions, accounts, categories }: Transac
                   {transaction.account?.name || '—'}
                 </TableCell>
                 <TableCell>
-                  {transaction.category ? (
-                    <Badge variant="secondary">{transaction.category.name}</Badge>
+                  {inlineCategoryLoading === transaction.id ? (
+                    <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
                   ) : (
-                    <span className="text-muted-foreground">—</span>
+                    <Popover
+                      open={editingCategoryId === transaction.id}
+                      onOpenChange={(open) => {
+                        if (open) {
+                          setEditingCategoryId(transaction.id);
+                          setInlineCategorySearch('');
+                        } else {
+                          setEditingCategoryId(null);
+                          setInlineCategorySearch('');
+                        }
+                      }}
+                    >
+                      <PopoverTrigger asChild>
+                        <button
+                          className="text-left hover:bg-muted/50 rounded px-1 py-0.5 -mx-1 transition-colors"
+                        >
+                          {transaction.category ? (
+                            <Badge variant="secondary" className="cursor-pointer">
+                              {transaction.category.name}
+                            </Badge>
+                          ) : (
+                            <span className="text-muted-foreground text-sm italic">+ Add category</span>
+                          )}
+                        </button>
+                      </PopoverTrigger>
+                      <PopoverContent className="w-[220px] p-2" align="start">
+                        <Input
+                          placeholder="Search categories..."
+                          value={inlineCategorySearch}
+                          onChange={(e) => setInlineCategorySearch(e.target.value)}
+                          className="h-8 mb-2"
+                          autoFocus
+                        />
+                        <div className="max-h-[250px] overflow-y-auto space-y-0.5">
+                          {!inlineCategorySearch && (
+                            <button
+                              className={`w-full text-left px-2 py-1.5 text-sm rounded hover:bg-muted transition-colors ${!transaction.category_id ? 'bg-muted' : ''}`}
+                              onClick={() => {
+                                handleInlineCategoryUpdate(transaction.id, null);
+                              }}
+                            >
+                              No Category
+                            </button>
+                          )}
+                          {categories
+                            .filter((cat) =>
+                              cat.name.toLowerCase().includes(inlineCategorySearch.toLowerCase())
+                            )
+                            .map((category) => (
+                              <button
+                                key={category.id}
+                                className={`w-full text-left px-2 py-1.5 text-sm rounded hover:bg-muted transition-colors ${transaction.category_id === category.id ? 'bg-muted' : ''}`}
+                                onClick={() => {
+                                  handleInlineCategoryUpdate(transaction.id, category.id);
+                                }}
+                              >
+                                {category.name}
+                              </button>
+                            ))}
+                          {categories.filter((cat) =>
+                            cat.name.toLowerCase().includes(inlineCategorySearch.toLowerCase())
+                          ).length === 0 && (
+                            <p className="text-sm text-muted-foreground text-center py-2">
+                              No categories found
+                            </p>
+                          )}
+                        </div>
+                      </PopoverContent>
+                    </Popover>
                   )}
                 </TableCell>
                 <TableCell
@@ -340,7 +848,7 @@ export function TransactionsList({ transactions, accounts, categories }: Transac
                   }`}
                 >
                   {isExpense ? '-' : '+'}
-                  {formatCurrency(transaction.amount)}
+                  {formatCurrency(Math.abs(transaction.amount))}
                 </TableCell>
                 <TableCell>
                   <DropdownMenu>
@@ -435,6 +943,146 @@ export function TransactionsList({ transactions, accounts, categories }: Transac
             <Button variant="destructive" onClick={handleBulkDelete} disabled={bulkDeleteLoading}>
               {bulkDeleteLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
               Delete {selectedIds.size} Transaction{selectedIds.size !== 1 ? 's' : ''}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Bulk Edit Payee Dialog */}
+      <Dialog open={bulkPayeeOpen} onOpenChange={(open) => {
+        setBulkPayeeOpen(open);
+        if (!open) setBulkPayeeValue('');
+      }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Edit Payee for {selectedIds.size} Transaction{selectedIds.size !== 1 ? 's' : ''}</DialogTitle>
+            <DialogDescription>
+              Enter the new payee name. This will be applied to all selected transactions.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-4">
+            <Label htmlFor="bulk-payee">Payee</Label>
+            <Input
+              id="bulk-payee"
+              placeholder="Enter payee name"
+              value={bulkPayeeValue}
+              onChange={(e) => setBulkPayeeValue(e.target.value)}
+              className="mt-2"
+            />
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setBulkPayeeOpen(false)}>
+              Cancel
+            </Button>
+            <Button onClick={handleBulkPayeeUpdate} disabled={bulkPayeeLoading}>
+              {bulkPayeeLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              Update Payee
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Bulk Edit Category Dialog */}
+      <Dialog open={bulkCategoryOpen} onOpenChange={(open) => {
+        setBulkCategoryOpen(open);
+        if (!open) {
+          setBulkCategoryValue('');
+          setBulkCategorySearch('');
+        }
+      }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Edit Category for {selectedIds.size} Transaction{selectedIds.size !== 1 ? 's' : ''}</DialogTitle>
+            <DialogDescription>
+              Select the new category. This will be applied to all selected transactions.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-4">
+            <Input
+              placeholder="Search categories..."
+              value={bulkCategorySearch}
+              onChange={(e) => setBulkCategorySearch(e.target.value)}
+              className="mb-3"
+              autoFocus
+            />
+            <div className="max-h-[250px] overflow-y-auto border rounded-md p-1 space-y-0.5">
+              {!bulkCategorySearch && (
+                <button
+                  className={`w-full text-left px-3 py-2 text-sm rounded hover:bg-muted transition-colors ${bulkCategoryValue === 'none' ? 'bg-muted' : ''}`}
+                  onClick={() => setBulkCategoryValue('none')}
+                >
+                  No Category
+                </button>
+              )}
+              {categories
+                .filter((cat) =>
+                  cat.name.toLowerCase().includes(bulkCategorySearch.toLowerCase())
+                )
+                .map((category) => (
+                  <button
+                    key={category.id}
+                    className={`w-full text-left px-3 py-2 text-sm rounded hover:bg-muted transition-colors ${bulkCategoryValue === category.id ? 'bg-muted' : ''}`}
+                    onClick={() => setBulkCategoryValue(category.id)}
+                  >
+                    {category.name}
+                  </button>
+                ))}
+              {categories.filter((cat) =>
+                cat.name.toLowerCase().includes(bulkCategorySearch.toLowerCase())
+              ).length === 0 && (
+                <p className="text-sm text-muted-foreground text-center py-3">
+                  No categories found
+                </p>
+              )}
+            </div>
+            {bulkCategoryValue && (
+              <p className="mt-2 text-sm text-muted-foreground">
+                Selected: <span className="font-medium text-foreground">{bulkCategoryValue === 'none' ? 'No Category' : categories.find(c => c.id === bulkCategoryValue)?.name}</span>
+              </p>
+            )}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setBulkCategoryOpen(false)}>
+              Cancel
+            </Button>
+            <Button onClick={handleBulkCategoryUpdate} disabled={bulkCategoryLoading || !bulkCategoryValue}>
+              {bulkCategoryLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              Update Category
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Bulk Edit Description Dialog */}
+      <Dialog open={bulkDescriptionOpen} onOpenChange={(open) => {
+        setBulkDescriptionOpen(open);
+        if (!open) setBulkDescriptionValue('');
+      }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Edit Description for {selectedIds.size} Transaction{selectedIds.size !== 1 ? 's' : ''}</DialogTitle>
+            <DialogDescription>
+              Enter the new description. This will be applied to all selected transactions.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-4">
+            <Label htmlFor="bulk-description">Description</Label>
+            <Input
+              id="bulk-description"
+              placeholder="Enter description"
+              value={bulkDescriptionValue}
+              onChange={(e) => setBulkDescriptionValue(e.target.value)}
+              className="mt-2"
+              autoFocus
+            />
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setBulkDescriptionOpen(false)}>
+              Cancel
+            </Button>
+            <Button onClick={handleBulkDescriptionUpdate} disabled={bulkDescriptionLoading}>
+              {bulkDescriptionLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              Update Description
             </Button>
           </DialogFooter>
         </DialogContent>

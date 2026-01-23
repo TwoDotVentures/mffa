@@ -108,7 +108,14 @@ export function TransactionDialog({
     setLoading(false);
   };
 
-  const filteredCategories = categories.filter((c) => c.category_type === transactionType);
+  // Show all categories, grouped by type for better UX
+  // First show categories matching the transaction type, then others
+  const sortedCategories = [...categories].sort((a, b) => {
+    const aMatches = a.category_type === transactionType ? 0 : 1;
+    const bMatches = b.category_type === transactionType ? 0 : 1;
+    if (aMatches !== bMatches) return aMatches - bMatches;
+    return a.name.localeCompare(b.name);
+  });
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -218,7 +225,7 @@ export function TransactionDialog({
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="__uncategorised__">Uncategorised</SelectItem>
-                    {filteredCategories.map((category) => (
+                    {sortedCategories.map((category) => (
                       <SelectItem key={category.id} value={category.id}>
                         {category.name}
                       </SelectItem>

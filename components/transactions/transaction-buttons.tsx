@@ -42,7 +42,7 @@ export function TransactionButtons({ accounts, categories }: TransactionButtonsP
         categories={categories}
       />
 
-      <CSVImportDialog open={importOpen} onOpenChange={setImportOpen} accounts={accounts} />
+      <CSVImportDialog open={importOpen} onOpenChange={setImportOpen} accounts={accounts} categories={categories} />
 
       <CategorisationRulesDialog
         open={rulesOpen}

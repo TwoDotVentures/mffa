@@ -26,27 +26,51 @@ export async function getAccounts(): Promise<Account[]> {
   }
 
   // Fetch transaction sums for each account
-  // The amount in transactions is positive for income and negative for expenses
+  // Amounts are stored as positive values, transaction_type determines the sign
   const accountIds = accounts.map(a => a.id);
 
-  const { data: transactionSums, error: txError } = await supabase
-    .from('transactions')
-    .select('account_id, amount')
-    .in('account_id', accountIds);
+  // Fetch transactions in batches to overcome Supabase's 1000 row limit
+  const BATCH_SIZE = 1000;
+  let allTransactionSums: { account_id: string; amount: number; transaction_type: string }[] = [];
+  let offset = 0;
+  let hasMore = true;
 
-  if (txError) {
-    console.error('Error fetching transaction sums:', txError);
-    // Return accounts with just starting balance if we can't get transactions
-    return accounts as Account[];
+  while (hasMore) {
+    const { data: batch, error: txError } = await supabase
+      .from('transactions')
+      .select('account_id, amount, transaction_type')
+      .in('account_id', accountIds)
+      .range(offset, offset + BATCH_SIZE - 1);
+
+    if (txError) {
+      console.error('Error fetching transaction sums:', txError);
+      // Return accounts with just starting balance if we can't get transactions
+      return accounts as Account[];
+    }
+
+    if (batch && batch.length > 0) {
+      allTransactionSums = [...allTransactionSums, ...batch];
+      offset += BATCH_SIZE;
+      hasMore = batch.length === BATCH_SIZE;
+    } else {
+      hasMore = false;
+    }
   }
 
   // Calculate sum per account
+  // Income adds to balance, expense subtracts from balance
   const sumByAccount: Record<string, number> = {};
-  for (const tx of transactionSums || []) {
+  for (const tx of allTransactionSums) {
     if (!sumByAccount[tx.account_id]) {
       sumByAccount[tx.account_id] = 0;
     }
-    sumByAccount[tx.account_id] += tx.amount || 0;
+    const amount = tx.amount || 0;
+    if (tx.transaction_type === 'expense') {
+      sumByAccount[tx.account_id] -= amount;
+    } else {
+      // income and transfer add to balance
+      sumByAccount[tx.account_id] += amount;
+    }
   }
 
   // Add calculated_balance field (starting_balance + transaction sums)

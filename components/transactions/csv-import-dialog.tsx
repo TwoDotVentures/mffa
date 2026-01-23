@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import {
@@ -27,14 +27,23 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import { Upload, Loader2, FileText, CheckCircle } from 'lucide-react';
-import { importTransactions } from '@/lib/transactions/actions';
-import type { Account, CSVTransaction } from '@/lib/types';
+import { Badge } from '@/components/ui/badge';
+import { Upload, Loader2, FileText, CheckCircle, AlertCircle, Plus, ArrowRight } from 'lucide-react';
+import { importTransactions, createCategories } from '@/lib/transactions/actions';
+import type { Account, Category, CSVTransaction } from '@/lib/types';
 
 interface CSVImportDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   accounts: Account[];
+  categories: Category[];
+}
+
+interface CategoryMappingState {
+  csvCategory: string;
+  action: 'create' | 'map';
+  existingCategoryId: string;
+  transactionType: 'income' | 'expense' | 'transfer';
 }
 
 function parseCSVLine(line: string): string[] {
@@ -57,24 +66,55 @@ function parseCSVLine(line: string): string[] {
 }
 
 function parseDate(dateStr: string): string | null {
-  const dateFormats = [
-    /(\d{2})\/(\d{2})\/(\d{4})/, // DD/MM/YYYY
-    /(\d{4})-(\d{2})-(\d{2})/, // YYYY-MM-DD
-    /(\d{2})-(\d{2})-(\d{4})/, // DD-MM-YYYY
+  if (!dateStr) return null;
+
+  const cleanDate = dateStr.trim();
+
+  // Try various date formats
+  const dateFormats: { regex: RegExp; parse: (m: RegExpMatchArray) => string }[] = [
+    // DD/MM/YYYY
+    { regex: /^(\d{1,2})\/(\d{1,2})\/(\d{4})$/, parse: (m) => `${m[3]}-${m[2].padStart(2, '0')}-${m[1].padStart(2, '0')}` },
+    // YYYY-MM-DD
+    { regex: /^(\d{4})-(\d{1,2})-(\d{1,2})$/, parse: (m) => `${m[1]}-${m[2].padStart(2, '0')}-${m[3].padStart(2, '0')}` },
+    // DD-MM-YYYY
+    { regex: /^(\d{1,2})-(\d{1,2})-(\d{4})$/, parse: (m) => `${m[3]}-${m[2].padStart(2, '0')}-${m[1].padStart(2, '0')}` },
+    // DD/MM/YY (assume 20xx for years < 50, 19xx otherwise)
+    { regex: /^(\d{1,2})\/(\d{1,2})\/(\d{2})$/, parse: (m) => {
+      const year = parseInt(m[3]) < 50 ? `20${m[3]}` : `19${m[3]}`;
+      return `${year}-${m[2].padStart(2, '0')}-${m[1].padStart(2, '0')}`;
+    }},
+    // DD-MM-YY
+    { regex: /^(\d{1,2})-(\d{1,2})-(\d{2})$/, parse: (m) => {
+      const year = parseInt(m[3]) < 50 ? `20${m[3]}` : `19${m[3]}`;
+      return `${year}-${m[2].padStart(2, '0')}-${m[1].padStart(2, '0')}`;
+    }},
+    // YYYY/MM/DD
+    { regex: /^(\d{4})\/(\d{1,2})\/(\d{1,2})$/, parse: (m) => `${m[1]}-${m[2].padStart(2, '0')}-${m[3].padStart(2, '0')}` },
+    // DD MMM YYYY (e.g., 15 Jan 2024)
+    { regex: /^(\d{1,2})\s+(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\s+(\d{4})$/i, parse: (m) => {
+      const months: Record<string, string> = { jan: '01', feb: '02', mar: '03', apr: '04', may: '05', jun: '06', jul: '07', aug: '08', sep: '09', oct: '10', nov: '11', dec: '12' };
+      return `${m[3]}-${months[m[2].toLowerCase()]}-${m[1].padStart(2, '0')}`;
+    }},
+    // MMM DD, YYYY (e.g., Jan 15, 2024)
+    { regex: /^(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\s+(\d{1,2}),?\s+(\d{4})$/i, parse: (m) => {
+      const months: Record<string, string> = { jan: '01', feb: '02', mar: '03', apr: '04', may: '05', jun: '06', jul: '07', aug: '08', sep: '09', oct: '10', nov: '11', dec: '12' };
+      return `${m[3]}-${months[m[1].toLowerCase()]}-${m[2].padStart(2, '0')}`;
+    }},
   ];
 
-  for (const format of dateFormats) {
-    const match = dateStr.match(format);
+  for (const { regex, parse } of dateFormats) {
+    const match = cleanDate.match(regex);
     if (match) {
-      if (format === dateFormats[0]) {
-        return `${match[3]}-${match[2]}-${match[1]}`;
-      } else if (format === dateFormats[1]) {
-        return `${match[1]}-${match[2]}-${match[3]}`;
-      } else {
-        return `${match[3]}-${match[2]}-${match[1]}`;
-      }
+      return parse(match);
     }
   }
+
+  // Last resort: try JavaScript Date parsing
+  const parsed = new Date(cleanDate);
+  if (!isNaN(parsed.getTime())) {
+    return parsed.toISOString().split('T')[0];
+  }
+
   return null;
 }
 
@@ -92,6 +132,7 @@ function parseCSV(text: string): CSVTransaction[] {
   const dateIdx = headers.findIndex(h => h.includes('date'));
   const descIdx = headers.findIndex(h => h.includes('description') || h.includes('narrative') || h.includes('details') || h.includes('memo'));
   const payeeIdx = headers.findIndex(h => h.includes('payee') || h.includes('merchant') || h.includes('vendor'));
+  const categoryIdx = headers.findIndex(h => h.includes('category') || h.includes('type'));
   const amountIdx = headers.findIndex(h => h === 'amount' || h.includes('amount'));
   const debitIdx = headers.findIndex(h => h.includes('debit') || h.includes('withdrawal'));
   const creditIdx = headers.findIndex(h => h.includes('credit') || h.includes('deposit'));
@@ -106,7 +147,7 @@ function parseCSV(text: string): CSVTransaction[] {
     if (!line.trim()) continue;
 
     const fields = parseCSVLine(line);
-    if (fields.length < 3) continue;
+    if (fields.length < 2) continue; // Need at least date and description
 
     // Parse date
     const dateStr = fields[useDateIdx];
@@ -119,6 +160,9 @@ function parseCSV(text: string): CSVTransaction[] {
 
     // Parse payee (if column exists)
     const payee = payeeIdx >= 0 ? fields[payeeIdx] || undefined : undefined;
+
+    // Parse category (if column exists)
+    const category = categoryIdx >= 0 ? fields[categoryIdx] || undefined : undefined;
 
     // Parse amount
     let amount = 0;
@@ -138,23 +182,89 @@ function parseCSV(text: string): CSVTransaction[] {
       }
     }
 
-    if (amount !== 0) {
-      transactions.push({ date, description, amount, payee });
-    }
+    // Include all transactions (even zero amounts)
+    transactions.push({ date, description, amount, payee, category });
   }
 
   return transactions;
 }
 
-export function CSVImportDialog({ open, onOpenChange, accounts }: CSVImportDialogProps) {
+type ImportStep = 'upload' | 'categories' | 'preview' | 'complete';
+
+export function CSVImportDialog({ open, onOpenChange, accounts, categories }: CSVImportDialogProps) {
   const router = useRouter();
+  const [step, setStep] = useState<ImportStep>('upload');
   const [accountId, setAccountId] = useState(accounts[0]?.id || '');
   const [file, setFile] = useState<File | null>(null);
   const [transactions, setTransactions] = useState<CSVTransaction[]>([]);
   const [loading, setLoading] = useState(false);
-  const [imported, setImported] = useState(false);
   const [importedCount, setImportedCount] = useState(0);
   const [error, setError] = useState<string | null>(null);
+
+  // Category mapping state
+  const [categoryMappings, setCategoryMappings] = useState<Record<string, CategoryMappingState>>({});
+
+  // Get unique categories from CSV that don't exist
+  const csvCategories = useMemo(() => {
+    const unique = new Set<string>();
+    for (const t of transactions) {
+      if (t.category) {
+        unique.add(t.category);
+      }
+    }
+    return Array.from(unique);
+  }, [transactions]);
+
+  // Categorize CSV categories as existing or new
+  const { existingCategories, newCategories } = useMemo(() => {
+    const existing: string[] = [];
+    const newCats: string[] = [];
+
+    for (const csvCat of csvCategories) {
+      const match = categories.find(
+        c => c.name.toLowerCase() === csvCat.toLowerCase()
+      );
+      if (match) {
+        existing.push(csvCat);
+      } else {
+        newCats.push(csvCat);
+      }
+    }
+
+    return { existingCategories: existing, newCategories: newCats };
+  }, [csvCategories, categories]);
+
+  // Initialize category mappings when new categories are detected
+  const initializeCategoryMappings = useCallback(() => {
+    const mappings: Record<string, CategoryMappingState> = {};
+
+    // Auto-map existing categories
+    for (const csvCat of existingCategories) {
+      const match = categories.find(
+        c => c.name.toLowerCase() === csvCat.toLowerCase()
+      );
+      if (match) {
+        mappings[csvCat] = {
+          csvCategory: csvCat,
+          action: 'map',
+          existingCategoryId: match.id,
+          transactionType: match.category_type as 'income' | 'expense',
+        };
+      }
+    }
+
+    // Default new categories to 'create' with expense type
+    for (const csvCat of newCategories) {
+      mappings[csvCat] = {
+        csvCategory: csvCat,
+        action: 'create',
+        existingCategoryId: '',
+        transactionType: 'expense',
+      };
+    }
+
+    setCategoryMappings(mappings);
+  }, [existingCategories, newCategories, categories]);
 
   const handleFileChange = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
     const selectedFile = e.target.files?.[0];
@@ -162,7 +272,6 @@ export function CSVImportDialog({ open, onOpenChange, accounts }: CSVImportDialo
 
     setFile(selectedFile);
     setError(null);
-    setImported(false);
 
     try {
       const text = await selectedFile.text();
@@ -179,20 +288,90 @@ export function CSVImportDialog({ open, onOpenChange, accounts }: CSVImportDialo
     }
   }, []);
 
+  const handleNext = useCallback(() => {
+    if (step === 'upload') {
+      if (newCategories.length > 0) {
+        initializeCategoryMappings();
+        setStep('categories');
+      } else {
+        initializeCategoryMappings();
+        setStep('preview');
+      }
+    } else if (step === 'categories') {
+      setStep('preview');
+    }
+  }, [step, newCategories.length, initializeCategoryMappings]);
+
+  const handleBack = useCallback(() => {
+    if (step === 'categories') {
+      setStep('upload');
+    } else if (step === 'preview') {
+      if (newCategories.length > 0) {
+        setStep('categories');
+      } else {
+        setStep('upload');
+      }
+    }
+  }, [step, newCategories.length]);
+
+  const updateCategoryMapping = (csvCategory: string, field: keyof CategoryMappingState, value: string) => {
+    setCategoryMappings(prev => ({
+      ...prev,
+      [csvCategory]: {
+        ...prev[csvCategory],
+        [field]: value,
+        // Reset existingCategoryId when switching to create
+        ...(field === 'action' && value === 'create' ? { existingCategoryId: '' } : {}),
+      },
+    }));
+  };
+
   const handleImport = async () => {
     if (!accountId || transactions.length === 0) return;
 
     setLoading(true);
     setError(null);
 
-    const result = await importTransactions(accountId, transactions);
+    try {
+      // First, create any new categories
+      const categoriesToCreate = Object.values(categoryMappings)
+        .filter(m => m.action === 'create')
+        .map(m => ({
+          name: m.csvCategory,
+          categoryType: m.transactionType,
+        }));
 
-    if (result.success) {
-      setImported(true);
-      setImportedCount(result.imported);
-      router.refresh();
-    } else {
-      setError(result.error || 'Failed to import transactions');
+      let categoryMap: Record<string, string> = {};
+
+      if (categoriesToCreate.length > 0) {
+        const createResult = await createCategories(categoriesToCreate);
+        if (!createResult.success) {
+          setError(createResult.error || 'Failed to create categories');
+          setLoading(false);
+          return;
+        }
+        categoryMap = { ...createResult.created };
+      }
+
+      // Add existing category mappings
+      for (const [csvCat, mapping] of Object.entries(categoryMappings)) {
+        if (mapping.action === 'map' && mapping.existingCategoryId) {
+          categoryMap[csvCat] = mapping.existingCategoryId;
+        }
+      }
+
+      // Import transactions with category mapping
+      const result = await importTransactions(accountId, transactions, categoryMap);
+
+      if (result.success) {
+        setImportedCount(result.imported);
+        setStep('complete');
+        router.refresh();
+      } else {
+        setError(result.error || 'Failed to import transactions');
+      }
+    } catch (err) {
+      setError('An unexpected error occurred');
     }
 
     setLoading(false);
@@ -201,9 +380,10 @@ export function CSVImportDialog({ open, onOpenChange, accounts }: CSVImportDialo
   const handleClose = () => {
     setFile(null);
     setTransactions([]);
-    setImported(false);
+    setStep('upload');
     setImportedCount(0);
     setError(null);
+    setCategoryMappings({});
     onOpenChange(false);
   };
 
@@ -212,15 +392,23 @@ export function CSVImportDialog({ open, onOpenChange, accounts }: CSVImportDialo
 
   return (
     <Dialog open={open} onOpenChange={handleClose}>
-      <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-[700px]">
+      <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-[800px]">
         <DialogHeader>
-          <DialogTitle>Import Transactions</DialogTitle>
+          <DialogTitle>
+            {step === 'upload' && 'Import Transactions'}
+            {step === 'categories' && 'Map Categories'}
+            {step === 'preview' && 'Preview Import'}
+            {step === 'complete' && 'Import Complete'}
+          </DialogTitle>
           <DialogDescription>
-            Upload a CSV file from your bank to import transactions.
+            {step === 'upload' && 'Upload a CSV file from your bank to import transactions.'}
+            {step === 'categories' && 'Some categories in your CSV don\'t exist yet. Choose how to handle them.'}
+            {step === 'preview' && 'Review your transactions before importing.'}
+            {step === 'complete' && `Successfully imported ${importedCount} transactions.`}
           </DialogDescription>
         </DialogHeader>
 
-        {imported ? (
+        {step === 'complete' ? (
           <div className="flex flex-col items-center justify-center py-8">
             <CheckCircle className="mb-4 h-16 w-16 text-green-500" />
             <h3 className="text-lg font-semibold">Import Complete!</h3>
@@ -234,54 +422,180 @@ export function CSVImportDialog({ open, onOpenChange, accounts }: CSVImportDialo
         ) : (
           <>
             {error && (
-              <div className="rounded-md bg-destructive/10 p-3 text-sm text-destructive">
+              <div className="rounded-md bg-destructive/10 p-3 text-sm text-destructive flex items-center gap-2">
+                <AlertCircle className="h-4 w-4" />
                 {error}
               </div>
             )}
 
-            <div className="grid gap-4">
-              <div className="grid gap-2">
-                <Label htmlFor="account">Import to Account *</Label>
-                <Select value={accountId} onValueChange={setAccountId}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select account" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {accounts.map((account) => (
-                      <SelectItem key={account.id} value={account.id}>
-                        {account.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <div className="grid gap-2">
-                <Label>CSV File</Label>
-                <div className="flex items-center gap-4">
-                  <label className="flex cursor-pointer items-center gap-2 rounded-md border border-dashed border-muted-foreground/25 px-4 py-8 transition-colors hover:border-muted-foreground/50">
-                    <input
-                      type="file"
-                      accept=".csv"
-                      onChange={handleFileChange}
-                      className="hidden"
-                    />
-                    {file ? (
-                      <>
-                        <FileText className="h-5 w-5" />
-                        <span>{file.name}</span>
-                      </>
-                    ) : (
-                      <>
-                        <Upload className="h-5 w-5" />
-                        <span>Click to upload CSV</span>
-                      </>
-                    )}
-                  </label>
+            {step === 'upload' && (
+              <div className="grid gap-4">
+                <div className="grid gap-2">
+                  <Label htmlFor="account">Import to Account *</Label>
+                  <Select value={accountId} onValueChange={setAccountId}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select account" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {accounts.map((account) => (
+                        <SelectItem key={account.id} value={account.id}>
+                          {account.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </div>
-              </div>
 
-              {transactions.length > 0 && (
+                <div className="grid gap-2">
+                  <Label>CSV File</Label>
+                  <div className="flex items-center gap-4">
+                    <label className="flex w-full cursor-pointer items-center justify-center gap-2 rounded-md border border-dashed border-muted-foreground/25 px-4 py-8 transition-colors hover:border-muted-foreground/50">
+                      <input
+                        type="file"
+                        accept=".csv"
+                        onChange={handleFileChange}
+                        className="hidden"
+                      />
+                      {file ? (
+                        <>
+                          <FileText className="h-5 w-5" />
+                          <span>{file.name}</span>
+                        </>
+                      ) : (
+                        <>
+                          <Upload className="h-5 w-5" />
+                          <span>Click to upload CSV</span>
+                        </>
+                      )}
+                    </label>
+                  </div>
+                </div>
+
+                {transactions.length > 0 && (
+                  <div className="rounded-md bg-muted/50 p-3 text-sm">
+                    <p><strong>{transactions.length}</strong> transactions found</p>
+                    {csvCategories.length > 0 && (
+                      <p className="mt-1">
+                        <strong>{csvCategories.length}</strong> categories detected
+                        {newCategories.length > 0 && (
+                          <span className="text-amber-600 dark:text-amber-400">
+                            {' '}({newCategories.length} new)
+                          </span>
+                        )}
+                      </p>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {step === 'categories' && (
+              <div className="grid gap-4">
+                <div className="rounded-md bg-amber-500/10 border border-amber-500/20 p-3 text-sm">
+                  <p className="font-medium text-amber-700 dark:text-amber-400">
+                    {newCategories.length} new {newCategories.length === 1 ? 'category' : 'categories'} found
+                  </p>
+                  <p className="text-muted-foreground mt-1">
+                    Choose to create them or map to existing categories.
+                  </p>
+                </div>
+
+                <div className="max-h-[400px] overflow-auto rounded-md border">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>CSV Category</TableHead>
+                        <TableHead>Action</TableHead>
+                        <TableHead>Map To / Type</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {newCategories.map((csvCat) => {
+                        const mapping = categoryMappings[csvCat];
+                        if (!mapping) return null;
+
+                        return (
+                          <TableRow key={csvCat}>
+                            <TableCell>
+                              <div className="flex items-center gap-2">
+                                <Badge variant="outline">{csvCat}</Badge>
+                              </div>
+                            </TableCell>
+                            <TableCell>
+                              <Select
+                                value={mapping.action}
+                                onValueChange={(v) => updateCategoryMapping(csvCat, 'action', v)}
+                              >
+                                <SelectTrigger className="w-[140px]">
+                                  <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value="create">
+                                    <span className="flex items-center gap-2">
+                                      <Plus className="h-3 w-3" /> Create New
+                                    </span>
+                                  </SelectItem>
+                                  <SelectItem value="map">
+                                    <span className="flex items-center gap-2">
+                                      <ArrowRight className="h-3 w-3" /> Map to Existing
+                                    </span>
+                                  </SelectItem>
+                                </SelectContent>
+                              </Select>
+                            </TableCell>
+                            <TableCell>
+                              {mapping.action === 'create' ? (
+                                <Select
+                                  value={mapping.transactionType}
+                                  onValueChange={(v) => updateCategoryMapping(csvCat, 'transactionType', v)}
+                                >
+                                  <SelectTrigger className="w-[140px]">
+                                    <SelectValue />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    <SelectItem value="expense">Expense</SelectItem>
+                                    <SelectItem value="income">Income</SelectItem>
+                                    <SelectItem value="transfer">Transfer</SelectItem>
+                                  </SelectContent>
+                                </Select>
+                              ) : (
+                                <Select
+                                  value={mapping.existingCategoryId}
+                                  onValueChange={(v) => updateCategoryMapping(csvCat, 'existingCategoryId', v)}
+                                >
+                                  <SelectTrigger className="w-[200px]">
+                                    <SelectValue placeholder="Select category" />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    {categories.map((cat) => (
+                                      <SelectItem key={cat.id} value={cat.id}>
+                                        {cat.name}
+                                      </SelectItem>
+                                    ))}
+                                  </SelectContent>
+                                </Select>
+                              )}
+                            </TableCell>
+                          </TableRow>
+                        );
+                      })}
+                    </TableBody>
+                  </Table>
+                </div>
+
+                {existingCategories.length > 0 && (
+                  <div className="text-sm text-muted-foreground">
+                    <p>
+                      <CheckCircle className="inline h-4 w-4 text-green-500 mr-1" />
+                      {existingCategories.length} {existingCategories.length === 1 ? 'category' : 'categories'} auto-matched: {existingCategories.join(', ')}
+                    </p>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {step === 'preview' && (
+              <div className="grid gap-4">
                 <div className="grid gap-2">
                   <Label>Preview ({transactions.length} transactions)</Label>
                   <div className="max-h-[300px] overflow-auto rounded-md border">
@@ -290,6 +604,7 @@ export function CSVImportDialog({ open, onOpenChange, accounts }: CSVImportDialo
                         <TableRow>
                           <TableHead>Date</TableHead>
                           <TableHead>Description</TableHead>
+                          <TableHead>Category</TableHead>
                           <TableHead className="text-right">Amount</TableHead>
                         </TableRow>
                       </TableHeader>
@@ -297,8 +612,17 @@ export function CSVImportDialog({ open, onOpenChange, accounts }: CSVImportDialo
                         {transactions.slice(0, 10).map((t, i) => (
                           <TableRow key={i}>
                             <TableCell>{t.date}</TableCell>
-                            <TableCell className="max-w-[200px] truncate">
+                            <TableCell className="max-w-[150px] truncate">
                               {t.description}
+                            </TableCell>
+                            <TableCell>
+                              {t.category ? (
+                                <Badge variant="secondary" className="truncate max-w-[100px]">
+                                  {t.category}
+                                </Badge>
+                              ) : (
+                                <span className="text-muted-foreground">—</span>
+                              )}
                             </TableCell>
                             <TableCell
                               className={`text-right ${
@@ -311,7 +635,7 @@ export function CSVImportDialog({ open, onOpenChange, accounts }: CSVImportDialo
                         ))}
                         {transactions.length > 10 && (
                           <TableRow>
-                            <TableCell colSpan={3} className="text-center text-muted-foreground">
+                            <TableCell colSpan={4} className="text-center text-muted-foreground">
                               ... and {transactions.length - 10} more
                             </TableCell>
                           </TableRow>
@@ -320,20 +644,53 @@ export function CSVImportDialog({ open, onOpenChange, accounts }: CSVImportDialo
                     </Table>
                   </div>
                 </div>
-              )}
-            </div>
 
-            <DialogFooter>
+                {Object.keys(categoryMappings).length > 0 && (
+                  <div className="text-sm text-muted-foreground">
+                    <p>
+                      Categories to create:{' '}
+                      {Object.values(categoryMappings).filter(m => m.action === 'create').length}
+                    </p>
+                    <p>
+                      Categories to map:{' '}
+                      {Object.values(categoryMappings).filter(m => m.action === 'map').length}
+                    </p>
+                  </div>
+                )}
+              </div>
+            )}
+
+            <DialogFooter className="gap-2 sm:gap-0">
+              {step !== 'upload' && (
+                <Button type="button" variant="outline" onClick={handleBack}>
+                  Back
+                </Button>
+              )}
               <Button type="button" variant="outline" onClick={handleClose}>
                 Cancel
               </Button>
-              <Button
-                onClick={handleImport}
-                disabled={loading || !accountId || transactions.length === 0}
-              >
-                {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                Import {transactions.length} Transactions
-              </Button>
+              {step === 'upload' && (
+                <Button
+                  onClick={handleNext}
+                  disabled={!accountId || transactions.length === 0}
+                >
+                  Next
+                </Button>
+              )}
+              {step === 'categories' && (
+                <Button onClick={handleNext}>
+                  Continue to Preview
+                </Button>
+              )}
+              {step === 'preview' && (
+                <Button
+                  onClick={handleImport}
+                  disabled={loading}
+                >
+                  {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                  Import {transactions.length} Transactions
+                </Button>
+              )}
             </DialogFooter>
           </>
         )}

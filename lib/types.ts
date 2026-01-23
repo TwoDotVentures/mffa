@@ -143,7 +143,15 @@ export interface CSVTransaction {
   description: string;
   amount: number;
   payee?: string;
+  category?: string;
   balance?: number;
+}
+
+export interface CategoryMapping {
+  csvCategory: string;
+  action: 'create' | 'map' | 'skip';
+  existingCategoryId?: string;
+  transactionType?: 'income' | 'expense';
 }
 
 export interface TransactionFilters {
